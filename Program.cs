@@ -6,31 +6,67 @@ using System.Runtime.InteropServices;
 
 namespace OPTBR6Downloader
 {
-    class Program
+    public class Program
     {
+        // Win32 imports
         [DllImport("kernel32.dll", SetLastError = true)]
-        static extern IntPtr GetConsoleWindow();
+        static extern IntPtr GetStdHandle(int nStdHandle);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
-            int X, int Y, int cx, int cy, uint uFlags);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
 
-        const uint SWP_NOZORDER = 0x0004;
-        const uint SWP_NOMOVE = 0x0002;
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
 
-        static void SetConsoleWindowSize(int width, int height)
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool ReadConsoleInput(IntPtr hConsoleInput, out INPUT_RECORD lpBuffer, uint nLength, out uint lpNumberOfEventsRead);
+
+        const int STD_INPUT_HANDLE = -10;
+        const uint ENABLE_MOUSE_INPUT = 0x0010;
+        const uint ENABLE_EXTENDED_FLAGS = 0x0080;
+        const uint ENABLE_QUICK_EDIT_MODE = 0x0040;
+
+        public enum EventType : ushort
         {
-            IntPtr hwnd = GetConsoleWindow();
-            if (hwnd == IntPtr.Zero) return;
-
-            // width, height in pixels, not character cells.
-            SetWindowPos(hwnd, IntPtr.Zero, 0, 0, width, height, SWP_NOZORDER | SWP_NOMOVE);
+            KEY_EVENT = 1,
+            MOUSE_EVENT = 2
         }
+
+        [StructLayout(LayoutKind.Explicit)]
+        public struct INPUT_RECORD
+        {
+            [FieldOffset(0)] public EventType EventType;
+            [FieldOffset(4)] public KEY_EVENT_RECORD KeyEvent;
+            [FieldOffset(4)] public MOUSE_EVENT_RECORD MouseEvent;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct KEY_EVENT_RECORD
+        {
+            public bool bKeyDown;
+            public ushort wRepeatCount;
+            public ushort wVirtualKeyCode;
+            public ushort wVirtualScanCode;
+            public char UnicodeChar;
+            public uint dwControlKeyState;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MOUSE_EVENT_RECORD
+        {
+            public COORD dwMousePosition;
+            public uint dwButtonState;
+            public uint dwControlKeyState;
+            public uint dwEventFlags;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct COORD { public short X; public short Y; }
 
         public static void Main(string[] args)
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
-            SetConsoleWindowSize(800, 400);
+
             OneDriveCheck();
             CheckAndDownloadResources();
         }
@@ -329,18 +365,6 @@ namespace OPTBR6Downloader
             LocalizationCheck();
         }
 
-        static int SanitizeInput(string input, int min, int max)
-        {
-            if (int.TryParse(input?.Trim(), out int choice))
-            {
-                if (choice >= min && choice <= max)
-                    return choice;
-            }
-
-            Console.WriteLine($"Invalid input. Enter a number between {min} and {max}.");
-            return -1;
-        }
-
         static void MainMenu()
         {
             Console.Clear();
@@ -416,37 +440,83 @@ namespace OPTBR6Downloader
 
         static int ShowMenu(string[] options)
         {
-            int index = 0;
-            ConsoleKey key;
+            Console.CursorVisible = false;
+            ConsoleInput.EnableMouse();
 
-            do
+            int index = 0;
+            int startY = Console.CursorTop;
+
+            DrawOptions(options, index, startY);
+
+            while (true)
             {
-                Console.SetCursorPosition(0, 8);
-                for (int i = 0; i < options.Length; i++)
+                var rec = ConsoleInput.ReadOne();
+
+                // Keyboard navigation
+                if (ConsoleInput.IsKeyUp(rec))
                 {
-                    Console.SetCursorPosition(0, 8 + i);
-                    if (i == index)
-                    {
-                        Console.ForegroundColor = ConsoleColor.Green;
-                        Console.Write($"> {options[i]}".PadRight(Console.WindowWidth));
-                        Console.ResetColor();
-                    }
-                    else
-                    {
-                        Console.Write($"  {options[i]}".PadRight(Console.WindowWidth));
-                    }
+                    if (index > 0) { index--; DrawOptions(options, index, startY); }
+                    continue;
+                }
+                if (ConsoleInput.IsKeyDown(rec))
+                {
+                    if (index < options.Length - 1) { index++; DrawOptions(options, index, startY); }
+                    continue;
+                }
+                if (ConsoleInput.IsKeyEnter(rec))
+                {
+                    Console.CursorVisible = true;
+                    return index;
                 }
 
-                key = Console.ReadKey(true).Key;
+                // Mouse hover
+                if (ConsoleInput.IsMouseMoved(rec, out int mx, out int my))
+                {
+                    int hovered = my - startY;
+                    if (hovered >= 0 && hovered < options.Length && hovered != index)
+                    {
+                        index = hovered;
+                        DrawOptions(options, index, startY);
+                    }
+                    continue;
+                }
 
-                if (key == ConsoleKey.UpArrow && index > 0)
-                    index--;
-                else if (key == ConsoleKey.DownArrow && index < options.Length - 1)
-                    index++;
+                // Mouse click
+                if (ConsoleInput.IsMouseClick(rec, out int cx, out int cy))
+                {
+                    int clickedIndex = cy - startY;
+                    if (clickedIndex >= 0 && clickedIndex < options.Length)
+                    {
+                        Console.CursorVisible = true;
+                        return clickedIndex;
+                    }
+                }
             }
-            while (key != ConsoleKey.Enter);
+        }
 
-            return index;
+        static void DrawOptions(string[] options, int selectedIndex, int startY)
+        {
+            int width = Console.WindowWidth;
+            for (int i = 0; i < options.Length; i++)
+            {
+                Console.SetCursorPosition(0, startY + i);
+                string text = (i == selectedIndex ? $"> {options[i]}" : $"  {options[i]}");
+
+                // Clear the line completely
+                Console.Write(new string(' ', width));
+
+                Console.SetCursorPosition(0, startY + i);
+                if (i == selectedIndex)
+                {
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine(text);
+                    Console.ResetColor();
+                }
+                else
+                {
+                    Console.WriteLine(text);
+                }
+            }
         }
 
         static void DownloadMenu()
@@ -1370,6 +1440,84 @@ namespace OPTBR6Downloader
             Console.ReadKey(true);
             Console.Clear();
             MainMenu();
+        }
+    }
+
+    public static class ConsoleInput
+    {
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern IntPtr GetStdHandle(int nStdHandle);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool ReadConsoleInput(IntPtr hConsoleInput, out Program.INPUT_RECORD lpBuffer, uint nLength, out uint lpNumberOfEventsRead);
+
+        const int STD_INPUT_HANDLE = -10;
+        const uint ENABLE_MOUSE_INPUT = 0x0010;
+        const uint ENABLE_EXTENDED_FLAGS = 0x0080;
+        const uint ENABLE_QUICK_EDIT_MODE = 0x0040;
+
+        static IntPtr hInput = GetStdHandle(STD_INPUT_HANDLE);
+
+        public static void EnableMouse()
+        {
+            GetConsoleMode(hInput, out uint mode);
+
+            // disable quick edit, enable mouse
+            mode &= ~ENABLE_QUICK_EDIT_MODE;
+            mode |= ENABLE_EXTENDED_FLAGS | ENABLE_MOUSE_INPUT;
+
+            SetConsoleMode(hInput, mode);
+        }
+
+        public static Program.INPUT_RECORD ReadOne()
+        {
+            ReadConsoleInput(hInput, out Program.INPUT_RECORD record, 1, out _);
+            return record;
+        }
+
+        public static bool IsKeyUp(Program.INPUT_RECORD r) =>
+            r.EventType == Program.EventType.KEY_EVENT &&
+            r.KeyEvent.bKeyDown &&
+            r.KeyEvent.wVirtualKeyCode == 38; // Up arrow
+
+        public static bool IsKeyDown(Program.INPUT_RECORD r) =>
+            r.EventType == Program.EventType.KEY_EVENT &&
+            r.KeyEvent.bKeyDown &&
+            r.KeyEvent.wVirtualKeyCode == 40; // Down arrow
+
+        public static bool IsKeyEnter(Program.INPUT_RECORD r) =>
+            r.EventType == Program.EventType.KEY_EVENT &&
+            r.KeyEvent.bKeyDown &&
+            r.KeyEvent.wVirtualKeyCode == 13; // Enter
+
+        public static bool IsMouseMoved(Program.INPUT_RECORD r, out int x, out int y)
+        {
+            if (r.EventType == Program.EventType.MOUSE_EVENT && r.MouseEvent.dwEventFlags == 1) // Mouse moved
+            {
+                x = r.MouseEvent.dwMousePosition.X;
+                y = r.MouseEvent.dwMousePosition.Y;
+                return true;
+            }
+            x = y = -1;
+            return false;
+        }
+
+        public static bool IsMouseClick(Program.INPUT_RECORD r, out int x, out int y)
+        {
+            if (r.EventType == Program.EventType.MOUSE_EVENT && r.MouseEvent.dwButtonState == 1) // Left click
+            {
+                x = r.MouseEvent.dwMousePosition.X;
+                y = r.MouseEvent.dwMousePosition.Y;
+                return true;
+            }
+            x = y = -1;
+            return false;
         }
     }
 }
