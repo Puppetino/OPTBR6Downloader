@@ -1,77 +1,31 @@
 ﻿using System;
 using System.Diagnostics;
-using System.IO;
 using System.Net;
 using System.Runtime.InteropServices;
 
 namespace OPTBR6Downloader
 {
-    public class Program
+    class Program
     {
-        // Win32 imports
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern IntPtr GetStdHandle(int nStdHandle);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool ReadConsoleInput(IntPtr hConsoleInput, out INPUT_RECORD lpBuffer, uint nLength, out uint lpNumberOfEventsRead);
-
-        const int STD_INPUT_HANDLE = -10;
-        const uint ENABLE_MOUSE_INPUT = 0x0010;
-        const uint ENABLE_EXTENDED_FLAGS = 0x0080;
-        const uint ENABLE_QUICK_EDIT_MODE = 0x0040;
-
-        public enum EventType : ushort
-        {
-            KEY_EVENT = 1,
-            MOUSE_EVENT = 2
-        }
-
-        [StructLayout(LayoutKind.Explicit)]
-        public struct INPUT_RECORD
-        {
-            [FieldOffset(0)] public EventType EventType;
-            [FieldOffset(4)] public KEY_EVENT_RECORD KeyEvent;
-            [FieldOffset(4)] public MOUSE_EVENT_RECORD MouseEvent;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct KEY_EVENT_RECORD
-        {
-            public bool bKeyDown;
-            public ushort wRepeatCount;
-            public ushort wVirtualKeyCode;
-            public ushort wVirtualScanCode;
-            public char UnicodeChar;
-            public uint dwControlKeyState;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct MOUSE_EVENT_RECORD
-        {
-            public COORD dwMousePosition;
-            public uint dwButtonState;
-            public uint dwControlKeyState;
-            public uint dwEventFlags;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct COORD { public short X; public short Y; }
-
         public static void Main(string[] args)
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
+            Console.Title = "OPTB R6 Downloader";
+            Console.WindowHeight = 20;
+            Console.WindowWidth = 100;
 
-            OneDriveCheck();
-            CheckAndDownloadResources();
+            Program.oneDriveCheck();
+            Program.check7Zip();
+            Program.depotCheck();
+            Program.crackCheck();
+            Program.cmdCheck();
+            Program.localizationCheck();
+
+            Program.mainMenu();
+            Console.ReadKey();
         }
 
-        static void OneDriveCheck()
+        public static void oneDriveCheck()
         {
             string currentDir = Directory.GetCurrentDirectory();
 
@@ -84,34 +38,31 @@ namespace OPTBR6Downloader
                 });
 
                 Console.Clear();
-                Console.WriteLine("----------------------------------------------------------------------------------------------------------------");
-                Console.WriteLine("| You ran this downloader inside of a OneDrive folder, move the downloader to a different location.             |");
-                Console.WriteLine("| If you can't figure out how to move it follow this guide: https://shorturl.at/qk3SX                           |");
-                Console.WriteLine("| PLEASE just check ALL of the OneDrive folder locations | DONT MAKE HELP POSTS ABOUT THIS                      |");
-                Console.WriteLine("----------------------------------------------------------------------------------------------------------------");
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
+                Console.WriteLine("| You ran this downloader inside of a OneDrive folder, move the downloader to a different location.|");
+                Console.WriteLine("| If you can't figure out how to move it follow this guide: https://shorturl.at/qk3SX              |");
+                Console.WriteLine("| PLEASE just check ALL of the OneDrive folder locations | DONT MAKE HELP POSTS ABOUT THIS         |");
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
                 Console.WriteLine("Press any key to close the downloader...");
                 Console.ReadKey();
                 Environment.Exit(0);
             }
         }
 
-        static void CheckAndDownloadResources()
+        public static void check7Zip()
         {
             string resourcesPath = Path.Combine("Resources", "Tools");
             string sevenZipPath = Path.Combine("Resources", "7z.exe");
 
-            if (!Directory.Exists(resourcesPath))
-            {
-                Directory.CreateDirectory(resourcesPath);
-            }
+            if (!Directory.Exists(resourcesPath)) Directory.CreateDirectory(resourcesPath);
 
             if (!File.Exists(sevenZipPath))
             {
                 Console.Title = "Downloading 7-Zip...";
                 Console.Clear();
-                Console.WriteLine("-------------------------------------------------------------------------------");
-                Console.WriteLine("                        Downloading 7-Zip...");
-                Console.WriteLine("-------------------------------------------------------------------------------");
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
+                Console.WriteLine("|                                      Downloading 7-Zip...                                        |");
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
 
                 try
                 {
@@ -140,42 +91,90 @@ namespace OPTBR6Downloader
                     Environment.Exit(1);
                 }
             }
-            DepotCheck();
         }
 
-        static void DepotCheck()
+        public static void depotCheck()
         {
             string depotDownloader = Path.Combine("Resources", "DepotDownloader.dll");
-            if (File.Exists(depotDownloader))
+            if (!File.Exists(depotDownloader))
             {
-                GetCracks();
-            }
-            else
-            {
-                GetDepotDownloader();
+                Console.Title = "Downloading DepotDownloader...";
+                Console.Clear();
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
+                Console.WriteLine("|                                 Downloading DepotDownloader...                                   |");
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
+
+                try
+                {
+                    using (WebClient client = new WebClient())
+                    {
+                        string zipFile = Path.Combine(Directory.GetCurrentDirectory(), "depot.zip");
+                        string url = "https://github.com/SteamRE/DepotDownloader/releases/download/DepotDownloader_3.4.0/DepotDownloader-framework.zip";
+
+                        client.DownloadFile(url, zipFile);
+
+                        // Extract with 7z.exe
+                        string sevenZip = Path.Combine(Directory.GetCurrentDirectory(), "Resources", "7z.exe");
+                        string outputDir = Path.Combine(Directory.GetCurrentDirectory(), "Resources");
+
+                        ProcessStartInfo psi = new ProcessStartInfo
+                        {
+                            FileName = sevenZip,
+                            Arguments = $"x -y -o\"{outputDir}\" \"{zipFile}\" -aoa",
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        };
+                        using (var proc = Process.Start(psi))
+                        {
+                            proc.WaitForExit();
+                        }
+
+                        File.Delete(zipFile);
+                    }
+
+                    Console.WriteLine("DepotDownloader downloaded and extracted successfully!");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to download DepotDownloader: {ex.Message}");
+                    Console.ReadKey(true);
+                    Environment.Exit(1);
+                }
+
+                depotCheck();
             }
         }
 
-        static void GetDepotDownloader()
+        public static void crackCheck()
         {
-            Console.Title = "Downloading DepotDownloader...";
-            Console.Clear();
-            Console.WriteLine("-------------------------------------------------------------------------------");
-            Console.WriteLine("                        Downloading DepotDownloader...");
-            Console.WriteLine("-------------------------------------------------------------------------------");
+            string crackDir = Path.Combine("Resources", "Cracks");
+            string crackFolder1 = Path.Combine(crackDir, "Y1SX-Y6S2");
+            string crackFolder2 = Path.Combine(crackDir, "Y6S3");
+            string crackFolder3 = Path.Combine(crackDir, "Y6S4-Y8SX");
 
-            try
+            if (!Directory.Exists(crackDir)) Directory.CreateDirectory(crackDir);
+            if (!Directory.Exists(crackFolder1) || !Directory.Exists(crackFolder2) || !Directory.Exists(crackFolder3))
             {
-                using (WebClient client = new WebClient())
+                Console.Title = "Downloading Cracks...";
+                Console.Clear();
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
+                Console.WriteLine("|                                     Downloading Cracks...                                        |");
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
+
+                string zipFile = Path.Combine(Directory.GetCurrentDirectory(), "Cracks.zip");
+                string url = "https://github.com/JOJOVAV/r6-downloader/raw/refs/heads/main/Cracks.zip";
+
+                try
                 {
-                    string zipFile = Path.Combine(Directory.GetCurrentDirectory(), "depot.zip");
-                    string url = "https://github.com/SteamRE/DepotDownloader/releases/download/DepotDownloader_3.4.0/DepotDownloader-framework.zip";
+                    using (WebClient client = new WebClient())
+                    {
+                        client.DownloadFile(url, zipFile);
+                    }
 
-                    client.DownloadFile(url, zipFile);
-
-                    // Extract with 7z.exe
                     string sevenZip = Path.Combine(Directory.GetCurrentDirectory(), "Resources", "7z.exe");
-                    string outputDir = Path.Combine(Directory.GetCurrentDirectory(), "Resources");
+                    string outputDir = crackDir;
+
+                    if (!Directory.Exists(outputDir)) Directory.CreateDirectory(outputDir);
 
                     ProcessStartInfo psi = new ProcessStartInfo
                     {
@@ -184,202 +183,109 @@ namespace OPTBR6Downloader
                         UseShellExecute = false,
                         CreateNoWindow = true
                     };
-                    using (var proc = Process.Start(psi))
+
+                    using (Process proc = Process.Start(psi))
                     {
                         proc.WaitForExit();
                     }
 
                     File.Delete(zipFile);
+
+                    Console.WriteLine("Cracks downloaded and extracted successfully!");
                 }
-
-                Console.WriteLine("DepotDownloader downloaded and extracted successfully!");
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to download Cracks: {ex.Message}");
+                    Console.WriteLine("Press any key to exit...");
+                    Console.ReadKey();
+                    Environment.Exit(1);
+                }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to download DepotDownloader: {ex.Message}");
-                Console.ReadKey(true);
-                Environment.Exit(1);
-            }
-
-            DepotCheck(); // re-check
         }
 
-        static void GetCracks()
-        {
-            string cracksDir = Path.Combine("Resources", "Cracks");
-            string checkDirY1SX = Path.Combine(cracksDir, "Y1SX-Y6S2");
-            string checkDirY6S3 = Path.Combine(cracksDir, "Y6S3");
-            string checkDirY6S4 = Path.Combine(cracksDir, "Y6S4-Y8SX");
-
-            if (Directory.Exists(cracksDir) && Directory.Exists(checkDirY1SX) && Directory.Exists(checkDirY6S3) && Directory.Exists(checkDirY6S4))
-            {
-                Console.WriteLine("Cracks are already present. Skipping download.");
-                CmdCheck();
-            }
-
-            Console.Title = "Downloading Cracks...";
-            Console.Clear();
-            Console.WriteLine("-------------------------------------------------------------------------------");
-            Console.WriteLine("                        Downloading Cracks...");
-            Console.WriteLine("-------------------------------------------------------------------------------");
-
-            string zipFile = Path.Combine(Directory.GetCurrentDirectory(), "Cracks.zip");
-            string url = "https://github.com/JOJOVAV/r6-downloader/raw/refs/heads/main/Cracks.zip";
-
-            try
-            {
-                using (WebClient client = new WebClient())
-                {
-                    client.DownloadFile(url, zipFile);
-                }
-
-                string sevenZip = Path.Combine(Directory.GetCurrentDirectory(), "Resources", "7z.exe");
-                string outputDir = cracksDir;
-
-                if (!Directory.Exists(outputDir))
-                    Directory.CreateDirectory(outputDir);
-
-                ProcessStartInfo psi = new ProcessStartInfo
-                {
-                    FileName = sevenZip,
-                    Arguments = $"x -y -o\"{outputDir}\" \"{zipFile}\" -aoa",
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                using (Process proc = Process.Start(psi))
-                {
-                    proc.WaitForExit();
-                }
-
-                File.Delete(zipFile);
-
-                Console.WriteLine("Cracks downloaded and extracted!");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to download/extract AdditionalFiles: {ex.Message}");
-                Console.ReadKey(true);
-                Environment.Exit(1);
-            }
-
-            CmdCheck();
-        }
-
-        static void CmdCheck()
+        public static void cmdCheck()
         {
             string cmdPath = Path.Combine("Resources", "cmdmenusel.exe");
-            if (File.Exists(cmdPath))
+            if (!File.Exists(cmdPath))
             {
-                LocalizationCheck();
-            }
-            else
-            {
-                GetCmd();
-            }
-        }
+                Console.Title = "Downloading cmdmenusel...";
+                Console.Clear();
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
+                Console.WriteLine("|                                 Downloading cmdmenusel...                                        |");
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
 
-        static void GetCmd()
-        {
-            Console.Title = "Downloading cmdmenusel...";
-            Console.Clear();
-            Console.WriteLine("-------------------------------------------------------------------------------");
-            Console.WriteLine("                        Downloading cmdmenusel...");
-            Console.WriteLine("-------------------------------------------------------------------------------");
-
-            try
-            {
-                using (WebClient client = new WebClient())
+                try
                 {
-                    string tempFile = Path.Combine(Directory.GetCurrentDirectory(), "cmdmenusel.exe");
-                    string url = "https://github.com/SlejmUr/R6-AIOTool-Batch/raw/master/Requirements/cmdmenusel.exe";
+                    using (WebClient client = new WebClient())
+                    {
+                        string tempFile = Path.Combine(Directory.GetCurrentDirectory(), "cmdmenusel.exe");
+                        string url = "https://github.com/SlejmUr/R6-AIOTool-Batch/raw/master/Requirements/cmdmenusel.exe";
 
-                    client.DownloadFile(url, tempFile);
+                        client.DownloadFile(url, tempFile);
 
-                    string resourcesDir = Path.Combine(Directory.GetCurrentDirectory(), "Resources");
-                    if (!Directory.Exists(resourcesDir))
-                        Directory.CreateDirectory(resourcesDir);
+                        string resourcesDir = Path.Combine(Directory.GetCurrentDirectory(), "Resources");
+                        if (!Directory.Exists(resourcesDir))
+                            Directory.CreateDirectory(resourcesDir);
 
-                    string destination = Path.Combine(resourcesDir, "cmdmenusel.exe");
-                    if (File.Exists(destination)) File.Delete(destination);
-                    File.Move(tempFile, destination);
+                        string destination = Path.Combine(resourcesDir, "cmdmenusel.exe");
+                        if (File.Exists(destination)) File.Delete(destination);
+                        File.Move(tempFile, destination);
+                    }
+                    Console.WriteLine("cmdmenusel downloaded successfully!");
                 }
-                Console.WriteLine("cmdmenusel downloaded successfully!");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to download cmdmenusel: {ex.Message}");
-                Console.ReadKey(true);
-                Environment.Exit(1);
-            }
-
-            CmdCheck();
-        }
-
-        static void LocalizationCheck()
-        {
-            string locPath = Path.Combine("Resources", "localization.lang");
-            if (File.Exists(locPath))
-            {
-                MainMenu();
-            }
-            else
-            {
-                GetLocalization();
-            }
-        }
-
-        static void GetLocalization()
-        {
-            Console.Title = "Downloading Localization file...";
-            Console.Clear();
-            Console.WriteLine("-------------------------------------------------------------------------------");
-            Console.WriteLine("                        Downloading Localization file...");
-            Console.WriteLine("-------------------------------------------------------------------------------");
-
-            try
-            {
-                using (WebClient client = new WebClient())
+                catch (Exception ex)
                 {
-                    string tempFile = Path.Combine(Directory.GetCurrentDirectory(), "localization.lang");
-                    string url = "https://github.com/JOJOVAV/r6-downloader/raw/refs/heads/main/localization.lang";
-
-                    client.DownloadFile(url, tempFile);
-
-                    string resourcesDir = Path.Combine(Directory.GetCurrentDirectory(), "Resources");
-                    if (!Directory.Exists(resourcesDir))
-                        Directory.CreateDirectory(resourcesDir);
-
-                    string destination = Path.Combine(resourcesDir, "localization.lang");
-                    if (File.Exists(destination)) File.Delete(destination);
-                    File.Move(tempFile, destination);
+                    Console.WriteLine($"Failed to download cmdmenusel: {ex.Message}");
+                    Console.ReadKey(true);
+                    Environment.Exit(1);
                 }
-                Console.WriteLine("Localization file downloaded successfully!");
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to download localization file: {ex.Message}");
-                Console.ReadKey(true);
-                Environment.Exit(1);
-            }
-
-            LocalizationCheck();
         }
 
-        static void MainMenu()
+        public static void localizationCheck()
         {
-            Console.Clear();
-            Console.SetWindowSize(120, 30);
-            Console.SetBufferSize(120, 300);
-            Console.Title = "Rainbow Six Siege Downloader";
+            string langFile = Path.Combine("Resources", "localization.lang");
 
-            Console.WriteLine("--------------------------------------------------------------------------");
-            Console.WriteLine("|      OPTB OLD Rainbow Six Siege Downloader  - Made by Puppetino        |");
-            Console.WriteLine("--------------------------------------------------------------------------");
-            Console.WriteLine("| YOU MUST CLAIM FOR FREE A COPY OF SIEGE ON STEAM TO USE THE DOWNLOADER |");
-            Console.WriteLine("--------------------------------------------------------------------------");
-            Console.WriteLine("|         Use ↑/↓ to navigate and press Enter to select an option        |");
-            Console.WriteLine("--------------------------------------------------------------------------");
-            Console.WriteLine();
+            if (!File.Exists(langFile))
+            {
+                Console.Title = "Downloading Language File...";
+                Console.Clear();
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
+                Console.WriteLine("|                               Downloading Language Files...                                      |");
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
+
+                try
+                {
+                    using (WebClient client = new WebClient())
+                    {
+                        string tempFile = Path.Combine(Directory.GetCurrentDirectory(), "localization.lang");
+                        string url = "https://github.com/JOJOVAV/r6-downloader/raw/refs/heads/main/localization.lang";
+
+                        client.DownloadFile(url, tempFile);
+
+                        string resourcesDir = Path.Combine(Directory.GetCurrentDirectory(), "Resources");
+
+                        if (!Directory.Exists(resourcesDir)) Directory.CreateDirectory(resourcesDir);
+
+                        string destination = Path.Combine(resourcesDir, "localization.lang");
+                        if (File.Exists(destination)) File.Delete(destination);
+                        File.Move(tempFile, destination);
+                    }
+                    Console.WriteLine("Language file downloaded successfully!");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to download language file: {ex.Message}");
+                    Console.ReadKey(true);
+                    Environment.Exit(1);
+                }
+            }
+        }
+
+        public static void mainMenu()
+        {
+            Console.Title = "OPTB R6 Downloader";
+            Console.Clear();
 
             string[] options = new string[]
             {
@@ -397,22 +303,15 @@ namespace OPTBR6Downloader
             switch (choice)
             {
                 case 0:
-                    DownloadMenu();
+                    downloadMenu();
                     break;
                 case 1:
-                    Console.WriteLine("This feature is currently disabled.");
-                    Console.ReadKey();
-                    MainMenu();
-                    break;
                 case 2:
-                    Console.WriteLine("This feature is currently disabled.");
-                    Console.ReadKey();
-                    MainMenu();
-                    break;
                 case 3:
+                case 5:
                     Console.WriteLine("This feature is currently disabled.");
                     Console.ReadKey();
-                    MainMenu();
+                    mainMenu();
                     break;
                 case 4:
                     Process.Start(new ProcessStartInfo
@@ -420,12 +319,7 @@ namespace OPTBR6Downloader
                         FileName = "https://store.steampowered.com/app/359550/Tom_Clancys_Rainbow_Six_Siege_X/",
                         UseShellExecute = true
                     });
-                    MainMenu();
-                    break;
-                case 5:
-                    Console.WriteLine("This feature is currently disabled.");
-                    Console.ReadKey();
-                    MainMenu();
+                    mainMenu();
                     break;
                 case 6:
                     Process.Start(new ProcessStartInfo
@@ -433,95 +327,93 @@ namespace OPTBR6Downloader
                         FileName = "https://puppetino.github.io/Throwback-FAQ/",
                         UseShellExecute = true
                     });
-                    MainMenu();
+                    mainMenu();
                     break;
             }
         }
 
-        static int ShowMenu(string[] options)
+        public static int ShowMenu(string[] options)
         {
             Console.CursorVisible = false;
-            ConsoleInput.EnableMouse();
+            int selected = 0;
+            DrawMenu(options, selected, true);
 
-            int index = 0;
-            int startY = Console.CursorTop;
+            IntPtr hIn = GetStdHandle(STD_INPUT_HANDLE);
+            uint oldMode;
+            GetConsoleMode(hIn, out oldMode);
 
-            DrawOptions(options, index, startY);
+            uint newMode = ENABLE_EXTENDED_FLAGS | ENABLE_MOUSE_INPUT | ENABLE_WINDOW_INPUT;
+            SetConsoleMode(hIn, newMode);
+
+            INPUT_RECORD record;
+            uint read;
+            int lastSelected = selected;
 
             while (true)
             {
-                var rec = ConsoleInput.ReadOne();
+                ReadConsoleInput(hIn, out record, 1, out read);
 
-                // Keyboard navigation
-                if (ConsoleInput.IsKeyUp(rec))
+                if (record.EventType == MOUSE_EVENT)
                 {
-                    if (index > 0) { index--; DrawOptions(options, index, startY); }
-                    continue;
-                }
-                if (ConsoleInput.IsKeyDown(rec))
-                {
-                    if (index < options.Length - 1) { index++; DrawOptions(options, index, startY); }
-                    continue;
-                }
-                if (ConsoleInput.IsKeyEnter(rec))
-                {
-                    Console.CursorVisible = true;
-                    return index;
-                }
-
-                // Mouse hover
-                if (ConsoleInput.IsMouseMoved(rec, out int mx, out int my))
-                {
-                    int hovered = my - startY;
-                    if (hovered >= 0 && hovered < options.Length && hovered != index)
+                    int y = record.MouseEvent.dwMousePosition.Y - HEADER_LINES;
+                    if (y >= 0 && y < options.Length)
                     {
-                        index = hovered;
-                        DrawOptions(options, index, startY);
+                        selected = y;
+                        if ((record.MouseEvent.dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED) != 0)
+                        {
+                            Console.CursorVisible = true;
+                            SetConsoleMode(hIn, oldMode);
+                            return selected;
+                        }
                     }
-                    continue;
                 }
 
-                // Mouse click
-                if (ConsoleInput.IsMouseClick(rec, out int cx, out int cy))
+                if (selected != lastSelected)
                 {
-                    int clickedIndex = cy - startY;
-                    if (clickedIndex >= 0 && clickedIndex < options.Length)
-                    {
-                        Console.CursorVisible = true;
-                        return clickedIndex;
-                    }
+                    DrawMenu(options, selected, false);
+                    lastSelected = selected;
                 }
             }
         }
 
-        static void DrawOptions(string[] options, int selectedIndex, int startY)
+        private const int HEADER_LINES = 8;
+
+        private static void DrawMenu(string[] options, int selected, bool full)
         {
-            int width = Console.WindowWidth;
+            if (full)
+            {
+                Console.Clear();
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
+                Console.WriteLine("|                  OPTB OLD Rainbow Six Siege Downloader  - Made by Puppetino                      |");
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
+                Console.WriteLine("|            YOU MUST CLAIM FOR FREE A COPY OF SIEGE ON STEAM TO USE THE DOWNLOADER                |");
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
+                Console.WriteLine("|        Use ↑/↓ or click to navigate, press Enter to select, Esc to exit                          |");
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
+                Console.WriteLine();
+            }
+
             for (int i = 0; i < options.Length; i++)
             {
-                Console.SetCursorPosition(0, startY + i);
-                string text = (i == selectedIndex ? $"> {options[i]}" : $"  {options[i]}");
+                Console.SetCursorPosition(0, HEADER_LINES + i);
+                Console.Write(new string(' ', Console.WindowWidth));
+                Console.SetCursorPosition(0, HEADER_LINES + i);
 
-                // Clear the line completely
-                Console.Write(new string(' ', width));
-
-                Console.SetCursorPosition(0, startY + i);
-                if (i == selectedIndex)
+                if (i == selected)
                 {
-                    Console.ForegroundColor = ConsoleColor.Green;
-                    Console.WriteLine(text);
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.Write($"> {options[i]}");
                     Console.ResetColor();
                 }
-                else
-                {
-                    Console.WriteLine(text);
-                }
+                else Console.Write($"  {options[i]}");
             }
         }
 
-        static void DownloadMenu()
+        static void downloadMenu()
         {
             Console.Title = "Game Downloader";
+
+            Console.WindowHeight = 50;
 
             string[] options = new string[]
             {
@@ -568,66 +460,63 @@ namespace OPTBR6Downloader
                 "Prep Phase        | Y10S1| 51.4 GB | No Operators"
             };
 
-            int choice;
-            do
-            {
+            while (true) {
                 Console.Clear();
-                Console.WriteLine("-----------------------------------------------------------------------------------------------------");
-                Console.WriteLine("|  Use ↑/↓ to navigate, press Enter to select a version of Rainbow Six Siege to download.           |");
-                Console.WriteLine("-----------------------------------------------------------------------------------------------------");
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
+                Console.WriteLine("|              Click an option to select a version of Rainbow Six Siege to download.               |");
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
                 Console.WriteLine("  Season Name       | Year | Size    | Additional Notes");
 
-                choice = ShowMenu(options);
+                int choice = ShowMenu(options);
 
                 switch (choice)
                 {
-                    case 0: MainMenu(); return;
+                    case 0: mainMenu(); return;
                     case 1: continue;
-                    case 2: Vanilla(); break;
-                    case 3: BlackIce(); break;
-                    case 4: DustLine(); break;
-                    case 5: SkullRain(); break;
-                    case 6: RedCrow(); break;
-                    case 7: VelvetShell(); break;
-                    case 8: Health(); break;
-                    case 9: BloodOrchide(); break;
-                    case 10: WhiteNoise(); break;
-                    case 11: Chimera(); break;
-                    case 12: ParraBellum(); break;
-                    case 13: GrimSky(); break;
-                    case 14: WindBastion(); break;
-                    case 15: BurntHorizon(); break;
-                    case 16: PhantomSight(); break;
-                    case 17: EmberRise(); break;
-                    case 18: ShiftingTides(); break;
-                    case 19: VoidEdge(); break;
-                    case 20: SteelWave(); break;
-                    case 21: ShadowLegazy(); break;
-                    case 22: HMNeonDawn(); break;
-                    case 23: NeonDawn(); break;
-                    case 24: CrimsonHeist(); break;
-                    case 25: NorthStar(); break;
-                    case 26: CrystalGuard(); break;
-                    case 27: HighCaliber(); break;
-                    case 28: DemonVeil(); break;
-                    case 29: VectorGlare(); break;
-                    case 30: BrutalSwarm(); break;
-                    case 31: SolarRaid(); break;
-                    case 32: CommandingForce(); break;
-                    case 33: DreadFactor(); break;
-                    case 34: HeavyMettle(); break;
-                    case 35: DeepFreeze(); break;
-                    case 36: DeadlyOmen(); break;
-                    case 37: NewBlood(); break;
-                    case 38: TwinShells(); break;
-                    case 39: CollisionPoint(); break;
-                    case 40: PrepPhase(); break;
+                    case 2: vanilla(); break;
+                    case 3: blackIce(); break;
+                    case 4: dustLine(); break;
+                    case 5: skullRain(); break;
+                    case 6: redCrow(); break;
+                    case 7: velvetShell(); break;
+                    case 8: health(); break;
+                    case 9: bloodOrchide(); break;
+                    case 10: whiteNoise(); break;
+                    case 11: chimera(); break;
+                    case 12: parraBellum(); break;
+                    case 13: grimSky(); break;
+                    case 14: windBastion(); break;
+                    case 15: burntHorizon(); break;
+                    case 16: phantomSight(); break;
+                    case 17: emberRise(); break;
+                    case 18: shiftingTides(); break;
+                    case 19: voidEdge(); break;
+                    case 20: steelWave(); break;
+                    case 21: shadowLegazy(); break;
+                    case 22: hmNeonDawn(); break;
+                    case 23: neonDawn(); break;
+                    case 24: crimsonHeist(); break;
+                    case 25: northStar(); break;
+                    case 26: crystalGuard(); break;
+                    case 27: highCaliber(); break;
+                    case 28: demonVeil(); break;
+                    case 29: vectorGlare(); break;
+                    case 30: brutalSwarm(); break;
+                    case 31: solarRaid(); break;
+                    case 32: commandingForce(); break;
+                    case 33: dreadFactor(); break;
+                    case 34: heavyMettle(); break;
+                    case 35: deepFreeze(); break;
+                    case 36: deadlyOmen(); break;
+                    case 37: newBlood(); break;
+                    case 38: twinShells(); break;
+                    case 39: collisionPoint(); break;
+                    case 40: prepPhase(); break;
                 }
-
-            } while (true);
+            }
         }
 
-        static void Vanilla()
+        static void vanilla()
         {
             var depots = new (string, string)[]
             {
@@ -636,7 +525,7 @@ namespace OPTBR6Downloader
                 ("359551", "3893422760579204530")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y1S0_Vanilla",
                 appId: "359550",
                 depots: depots,
@@ -645,7 +534,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void BlackIce()
+        static void blackIce()
         {
             var depots = new (string, string)[]
             {
@@ -654,7 +543,7 @@ namespace OPTBR6Downloader
                 ("359551", "7932785808040895147")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y1S1_BlackIce",
                 appId: "359550",
                 depots: depots,
@@ -663,7 +552,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void DustLine()
+        static void dustLine()
         {
             var depots = new (string, string)[]
             {
@@ -672,7 +561,7 @@ namespace OPTBR6Downloader
                 ("359551", "2206497318678061176")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y1S2_DustLine",
                 appId: "359550",
                 depots: depots,
@@ -681,7 +570,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void SkullRain()
+        static void skullRain()
         {
             var depots = new (string, string)[]
             {
@@ -690,7 +579,7 @@ namespace OPTBR6Downloader
                 ("359551", "5851804596427790505")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y1S3_SkullRain",
                 appId: "359550",
                 depots: depots,
@@ -699,7 +588,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void RedCrow()
+        static void redCrow()
         {
             var depots = new (string, string)[]
             {
@@ -708,7 +597,7 @@ namespace OPTBR6Downloader
                 ("359551", "8569920171217002292")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y1S4_RedCrow",
                 appId: "359550",
                 depots: depots,
@@ -717,7 +606,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void VelvetShell()
+        static void velvetShell()
         {
             var depots = new (string, string)[]
             {
@@ -726,7 +615,7 @@ namespace OPTBR6Downloader
                 ("359551", "8006071763917433748")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y2S1_VelvetShell",
                 appId: "359550",
                 depots: depots,
@@ -735,7 +624,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void Health()
+        static void health()
         {
             var depots = new (string, string)[]
             {
@@ -744,7 +633,7 @@ namespace OPTBR6Downloader
                 ("359551", "708773000306432190")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y2S2_Health",
                 appId: "359550",
                 depots: depots,
@@ -753,7 +642,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void BloodOrchide()
+        static void bloodOrchide()
         {
             var depots = new (string, string)[]
             {
@@ -762,7 +651,7 @@ namespace OPTBR6Downloader
                 ("359551", "1613631671988840841")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y2S3_BloodOrchid",
                 appId: "359550",
                 depots: depots,
@@ -771,7 +660,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void WhiteNoise()
+        static void whiteNoise()
         {
             var depots = new (string, string)[]
             {
@@ -780,7 +669,7 @@ namespace OPTBR6Downloader
                 ("359551", "4221297486420648079")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y2S4_WhiteNoise",
                 appId: "359550",
                 depots: depots,
@@ -789,7 +678,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void Chimera()
+        static void chimera()
         {
             var depots = new (string, string)[]
             {
@@ -798,7 +687,7 @@ namespace OPTBR6Downloader
                 ("359551", "4701787239566783972")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y3S1_Chimera",
                 appId: "359550",
                 depots: depots,
@@ -807,7 +696,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void ParraBellum()
+        static void parraBellum()
         {
             var depots = new (string, string)[]
             {
@@ -816,7 +705,7 @@ namespace OPTBR6Downloader
                 ("359551", "8765715607275074515")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y3S2_ParaBellum",
                 appId: "359550",
                 depots: depots,
@@ -825,7 +714,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void GrimSky()
+        static void grimSky()
         {
             var depots = new (string, string)[]
             {
@@ -834,7 +723,7 @@ namespace OPTBR6Downloader
                 ("359551", "7781202564071310413")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y3S3_GrimSky",
                 appId: "359550",
                 depots: depots,
@@ -843,7 +732,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void WindBastion()
+        static void windBastion()
         {
             var depots = new (string, string)[]
             {
@@ -852,7 +741,7 @@ namespace OPTBR6Downloader
                 ("359551", "7659555540733025386")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y3S4_WindBastion",
                 appId: "359550",
                 depots: depots,
@@ -861,7 +750,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void BurntHorizon()
+        static void burntHorizon()
         {
             var depots = new (string, string)[]
             {
@@ -870,7 +759,7 @@ namespace OPTBR6Downloader
                 ("359551", "5935578581006804383")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y4S1_BurntHorizon",
                 appId: "359550",
                 depots: depots,
@@ -879,7 +768,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void PhantomSight()
+        static void phantomSight()
         {
             var depots = new (string, string)[]
             {
@@ -888,7 +777,7 @@ namespace OPTBR6Downloader
                 ("359551", "5408324128694463720")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y4S2_PhantomSight",
                 appId: "359550",
                 depots: depots,
@@ -897,7 +786,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void EmberRise()
+        static void emberRise()
         {
             var depots = new (string, string)[]
             {
@@ -906,7 +795,7 @@ namespace OPTBR6Downloader
                 ("359551", "7869081741739849703")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y4S3_EmberRise",
                 appId: "359550",
                 depots: depots,
@@ -915,7 +804,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void ShiftingTides()
+        static void shiftingTides()
         {
             var depots = new (string, string)[]
             {
@@ -924,7 +813,7 @@ namespace OPTBR6Downloader
                 ("359551", "1842268638395240106")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y4S4_ShiftingTides",
                 appId: "359550",
                 depots: depots,
@@ -933,7 +822,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void VoidEdge()
+        static void voidEdge()
         {
             var depots = new (string, string)[]
             {
@@ -942,7 +831,7 @@ namespace OPTBR6Downloader
                 ("359551", "6296533808765702678")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y5S1_VoidEdge",
                 appId: "359550",
                 depots: depots,
@@ -951,7 +840,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void SteelWave()
+        static void steelWave()
         {
             var depots = new (string, string)[]
             {
@@ -960,7 +849,7 @@ namespace OPTBR6Downloader
                 ("359551", "893971391196952070")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y5S2_SteelWave",
                 appId: "359550",
                 depots: depots,
@@ -969,7 +858,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void ShadowLegazy()
+        static void shadowLegazy()
         {
             var depots = new (string, string)[]
             {
@@ -978,7 +867,7 @@ namespace OPTBR6Downloader
                 ("359551", "3089981610366186823")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y5S3_ShadowLegacy",
                 appId: "359550",
                 depots: depots,
@@ -987,7 +876,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void HMNeonDawn()
+        static void hmNeonDawn()
         {
             var depots = new (string, string)[]
             {
@@ -996,7 +885,7 @@ namespace OPTBR6Downloader
                 ("359551", "6947060999143280245")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y5S4_NeonDawnHM",
                 appId: "359550",
                 depots: depots,
@@ -1005,7 +894,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void NeonDawn()
+        static void neonDawn()
         {
             var depots = new (string, string)[]
             {
@@ -1014,7 +903,7 @@ namespace OPTBR6Downloader
                 ("359551", "3711873929777458413")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y5S4_NeonDawn",
                 appId: "359550",
                 depots: depots,
@@ -1023,7 +912,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void CrimsonHeist()
+        static void crimsonHeist()
         {
             var depots = new (string, string)[]
             {
@@ -1032,7 +921,7 @@ namespace OPTBR6Downloader
                 ("359551", "7485515457663576274")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y6S1_CrimsonHeist",
                 appId: "359550",
                 depots: depots,
@@ -1041,7 +930,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void NorthStar()
+        static void northStar()
         {
             var depots = new (string, string)[]
             {
@@ -1050,7 +939,7 @@ namespace OPTBR6Downloader
                 ("359551", "809542866761090243")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y6S2_NorthStar",
                 appId: "359550",
                 depots: depots,
@@ -1059,7 +948,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void CrystalGuard()
+        static void crystalGuard()
         {
             var depots = new (string, string)[]
             {
@@ -1068,7 +957,7 @@ namespace OPTBR6Downloader
                 ("359551", "6526531850721822265")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y6S3_CrystalGuard",
                 appId: "359550",
                 depots: depots,
@@ -1077,7 +966,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void HighCaliber()
+        static void highCaliber()
         {
             var depots = new (string, string)[]
             {
@@ -1086,7 +975,7 @@ namespace OPTBR6Downloader
                 ("359551", "8627214406801860013")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y6S4_HighCalibre",
                 appId: "359550",
                 depots: depots,
@@ -1095,7 +984,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void DemonVeil()
+        static void demonVeil()
         {
             var depots = new (string, string)[]
             {
@@ -1104,7 +993,7 @@ namespace OPTBR6Downloader
                 ("359551", "2178080523228113690")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y7S1_DemonVeil",
                 appId: "359550",
                 depots: depots,
@@ -1113,7 +1002,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void VectorGlare()
+        static void vectorGlare()
         {
             var depots = new (string, string)[]
             {
@@ -1122,7 +1011,7 @@ namespace OPTBR6Downloader
                 ("359551", "133280937611742404")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y7S2_VectorGlare",
                 appId: "359550",
                 depots: depots,
@@ -1131,7 +1020,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void BrutalSwarm()
+        static void brutalSwarm()
         {
             var depots = new (string, string)[]
             {
@@ -1140,7 +1029,7 @@ namespace OPTBR6Downloader
                 ("359551", "5906302942203575464")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y7S3_BrutalSwarm",
                 appId: "359550",
                 depots: depots,
@@ -1149,7 +1038,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void SolarRaid()
+        static void solarRaid()
         {
             var depots = new (string, string)[]
             {
@@ -1158,7 +1047,7 @@ namespace OPTBR6Downloader
                 ("359551", "1819898955518120444")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y7S4_SolarRaid",
                 appId: "359550",
                 depots: depots,
@@ -1167,7 +1056,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void CommandingForce()
+        static void commandingForce()
         {
             var depots = new (string, string)[]
             {
@@ -1176,7 +1065,7 @@ namespace OPTBR6Downloader
                 ("359551", "5863062164463920572")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y8S1_CommandingForce",
                 appId: "359550",
                 depots: depots,
@@ -1185,7 +1074,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void DreadFactor()
+        static void dreadFactor()
         {
             var depots = new (string, string)[]
             {
@@ -1194,7 +1083,7 @@ namespace OPTBR6Downloader
                 ("359551", "1575870740329742681")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y8S2_DreadFactor",
                 appId: "359550",
                 depots: depots,
@@ -1203,7 +1092,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void HeavyMettle()
+        static void heavyMettle()
         {
             var depots = new (string, string)[]
             {
@@ -1212,7 +1101,7 @@ namespace OPTBR6Downloader
                 ("359551", "3005637025719884427")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y8S3_HeavyMettle",
                 appId: "359550",
                 depots: depots,
@@ -1221,7 +1110,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void DeepFreeze()
+        static void deepFreeze()
         {
             var depots = new (string, string)[]
             {
@@ -1230,7 +1119,7 @@ namespace OPTBR6Downloader
                 ("359551", "4957295777170965935")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y8S4_DeepFreeze",
                 appId: "359550",
                 depots: depots,
@@ -1239,7 +1128,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void DeadlyOmen()
+        static void deadlyOmen()
         {
             var depots = new (string, string)[]
             {
@@ -1248,7 +1137,7 @@ namespace OPTBR6Downloader
                 ("359551", "1140469899661941149")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y9S1_DeadlyOmen",
                 appId: "359550",
                 depots: depots,
@@ -1257,7 +1146,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void NewBlood()
+        static void newBlood()
         {
             var depots = new (string, string)[]
             {
@@ -1266,7 +1155,7 @@ namespace OPTBR6Downloader
                 ("359551", "3303120421075579181")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y9S2_NewBlood",
                 appId: "359550",
                 depots: depots,
@@ -1275,7 +1164,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void TwinShells()
+        static void twinShells()
         {
             var depots = new (string, string)[]
             {
@@ -1284,7 +1173,7 @@ namespace OPTBR6Downloader
                 ("359551", "825321500774263546")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y9S3_TwinShells",
                 appId: "359550",
                 depots: depots,
@@ -1293,7 +1182,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void CollisionPoint()
+        static void collisionPoint()
         {
             var depots = new (string, string)[]
             {
@@ -1302,7 +1191,7 @@ namespace OPTBR6Downloader
                 ("359551", "3039751959139581613")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y9S4_CollisionPoint",
                 appId: "359550",
                 depots: depots,
@@ -1311,7 +1200,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void PrepPhase()
+        static void prepPhase()
         {
             var depots = new (string, string)[]
             {
@@ -1320,7 +1209,7 @@ namespace OPTBR6Downloader
                 ("359551", "2619322944995294928")
             };
 
-            DownloadSeason(
+            downloadSeason(
                 seasonName: "Y10S1_PrepPhase",
                 appId: "359550",
                 depots: depots,
@@ -1329,7 +1218,7 @@ namespace OPTBR6Downloader
             );
         }
 
-        static void DownloadSeason(
+        static void downloadSeason(
             string seasonName,
             string appId,
             (string depot, string manifest)[] depots,
@@ -1346,36 +1235,33 @@ namespace OPTBR6Downloader
             if (!Directory.Exists(downloadsPath))
                 Directory.CreateDirectory(downloadsPath);
 
-            // depots
             foreach (var (depot, manifest) in depots)
             {
-                RunDepotDownloader(appId, depot, manifest, username, downloadsPath);
+                runDepotDownloader(appId, depot, manifest, username, downloadsPath);
             }
 
-            // crack files
             if (!string.IsNullOrEmpty(crackSubfolder))
             {
                 string cracksPath = Path.Combine("Resources", "Cracks", crackSubfolder);
                 if (Directory.Exists(cracksPath))
                 {
-                    RunRoboCopy(cracksPath, downloadsPath);
+                    runRoboCopy(cracksPath, downloadsPath);
                 }
             }
 
-            // localization
             if (includeLocalization)
             {
                 string locFile = Path.Combine("Resources", "localization.lang");
                 if (File.Exists(locFile))
                 {
-                    RunRoboCopy("Resources", downloadsPath, "localization.lang");
+                    runRoboCopy("Resources", downloadsPath, "localization.lang");
                 }
             }
 
-            DownloadComplete();
+            downloadComplete();
         }
 
-        static void RunDepotDownloader(string app, string depot, string manifest, string username, string outputDir)
+        static void runDepotDownloader(string app, string depot, string manifest, string username, string outputDir)
         {
             string depotDownloader = Path.Combine("Resources", "DepotDownloader.dll");
 
@@ -1387,25 +1273,28 @@ namespace OPTBR6Downloader
 
             string args = $"\"{depotDownloader}\" -app {app} -depot {depot} -manifest {manifest} -username {username} -remember-password -dir \"{outputDir}\" -validate -max-downloads 25";
 
-
             var psi = new ProcessStartInfo
             {
                 FileName = "dotnet",
                 Arguments = args,
                 UseShellExecute = false,
-                RedirectStandardOutput = false, 
-                RedirectStandardError = false,
-                RedirectStandardInput = false, 
-                CreateNoWindow = false       
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                RedirectStandardInput = false,
+                CreateNoWindow = false
             };
 
             using (var proc = Process.Start(psi))
             {
+                proc.OutputDataReceived += (s, e) => { if (e.Data != null) Console.WriteLine(e.Data); };
+                proc.ErrorDataReceived += (s, e) => { if (e.Data != null) Console.WriteLine("ERROR: " + e.Data); };
+                proc.BeginOutputReadLine();
+                proc.BeginErrorReadLine();
                 proc.WaitForExit();
             }
         }
 
-        static void RunRoboCopy(string source, string destination, string extraArgs = "")
+        static void runRoboCopy(string source, string destination, string extraArgs = "")
         {
             var psi = new ProcessStartInfo
             {
@@ -1427,97 +1316,67 @@ namespace OPTBR6Downloader
             }
         }
 
-        static void DownloadComplete()
+        static void downloadComplete()
         {
             Console.Title = "Download Complete";
+            Console.WindowHeight = 20;
             Console.Clear();
-            Console.WriteLine("----------------------------------------------------------------------------------------------------------------");
-            Console.WriteLine("|                                           Download Complete!                                                 |");
-            Console.WriteLine("----------------------------------------------------------------------------------------------------------------");
+            Console.WriteLine("----------------------------------------------------------------------------------------------------");
+            Console.WriteLine("|                                     Download Complete!                                           |");
+            Console.WriteLine("----------------------------------------------------------------------------------------------------");
             Console.WriteLine();
             Console.WriteLine("Press any key to return to the main menu...");
 
             Console.ReadKey(true);
             Console.Clear();
-            MainMenu();
+            mainMenu();
         }
-    }
 
-    public static class ConsoleInput
-    {
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern IntPtr GetStdHandle(int nStdHandle);
+        #region Native
+        private const int STD_INPUT_HANDLE = -10;
+        private const int ENABLE_MOUSE_INPUT = 0x0010;
+        private const int ENABLE_WINDOW_INPUT = 0x0008;
+        private const int ENABLE_EXTENDED_FLAGS = 0x0080;
+        private const int ENABLE_PROCESSED_INPUT = 0x0001;
+        private const int ENABLE_LINE_INPUT = 0x0002;
+        private const int KEY_EVENT = 0x0001;
+        private const int MOUSE_EVENT = 0x0002;
+        private const int FROM_LEFT_1ST_BUTTON_PRESSED = 0x0001;
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
+        [StructLayout(LayoutKind.Sequential)] private struct COORD { public short X; public short Y; }
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool ReadConsoleInput(IntPtr hConsoleInput, out Program.INPUT_RECORD lpBuffer, uint nLength, out uint lpNumberOfEventsRead);
-
-        const int STD_INPUT_HANDLE = -10;
-        const uint ENABLE_MOUSE_INPUT = 0x0010;
-        const uint ENABLE_EXTENDED_FLAGS = 0x0080;
-        const uint ENABLE_QUICK_EDIT_MODE = 0x0040;
-
-        static IntPtr hInput = GetStdHandle(STD_INPUT_HANDLE);
-
-        public static void EnableMouse()
+        [StructLayout(LayoutKind.Explicit)]
+        private struct INPUT_RECORD
         {
-            GetConsoleMode(hInput, out uint mode);
-
-            // disable quick edit, enable mouse
-            mode &= ~ENABLE_QUICK_EDIT_MODE;
-            mode |= ENABLE_EXTENDED_FLAGS | ENABLE_MOUSE_INPUT;
-
-            SetConsoleMode(hInput, mode);
+            [FieldOffset(0)] public ushort EventType;
+            [FieldOffset(4)] public KEY_EVENT_RECORD KeyEvent;
+            [FieldOffset(4)] public MOUSE_EVENT_RECORD MouseEvent;
         }
 
-        public static Program.INPUT_RECORD ReadOne()
+        [StructLayout(LayoutKind.Sequential)]
+        private struct KEY_EVENT_RECORD
         {
-            ReadConsoleInput(hInput, out Program.INPUT_RECORD record, 1, out _);
-            return record;
+            [MarshalAs(UnmanagedType.Bool)] public bool bKeyDown;
+            public ushort wRepeatCount;
+            public ushort wVirtualKeyCode;
+            public ushort wVirtualScanCode;
+            public char UnicodeChar;
+            public uint dwControlKeyState;
         }
 
-        public static bool IsKeyUp(Program.INPUT_RECORD r) =>
-            r.EventType == Program.EventType.KEY_EVENT &&
-            r.KeyEvent.bKeyDown &&
-            r.KeyEvent.wVirtualKeyCode == 38; // Up arrow
-
-        public static bool IsKeyDown(Program.INPUT_RECORD r) =>
-            r.EventType == Program.EventType.KEY_EVENT &&
-            r.KeyEvent.bKeyDown &&
-            r.KeyEvent.wVirtualKeyCode == 40; // Down arrow
-
-        public static bool IsKeyEnter(Program.INPUT_RECORD r) =>
-            r.EventType == Program.EventType.KEY_EVENT &&
-            r.KeyEvent.bKeyDown &&
-            r.KeyEvent.wVirtualKeyCode == 13; // Enter
-
-        public static bool IsMouseMoved(Program.INPUT_RECORD r, out int x, out int y)
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MOUSE_EVENT_RECORD
         {
-            if (r.EventType == Program.EventType.MOUSE_EVENT && r.MouseEvent.dwEventFlags == 1) // Mouse moved
-            {
-                x = r.MouseEvent.dwMousePosition.X;
-                y = r.MouseEvent.dwMousePosition.Y;
-                return true;
-            }
-            x = y = -1;
-            return false;
+            public COORD dwMousePosition;
+            public uint dwButtonState;
+            public uint dwControlKeyState;
+            public uint dwEventFlags;
         }
 
-        public static bool IsMouseClick(Program.INPUT_RECORD r, out int x, out int y)
-        {
-            if (r.EventType == Program.EventType.MOUSE_EVENT && r.MouseEvent.dwButtonState == 1) // Left click
-            {
-                x = r.MouseEvent.dwMousePosition.X;
-                y = r.MouseEvent.dwMousePosition.Y;
-                return true;
-            }
-            x = y = -1;
-            return false;
-        }
+        [DllImport("kernel32.dll")] private static extern IntPtr GetStdHandle(int nStdHandle);
+        [DllImport("kernel32.dll")] private static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
+        [DllImport("kernel32.dll")] private static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern bool ReadConsoleInput(IntPtr hConsoleInput, out INPUT_RECORD lpBuffer, uint nLength, out uint lpNumberOfEventsRead);
+        #endregion
     }
 }
