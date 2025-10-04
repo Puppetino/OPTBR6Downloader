@@ -384,11 +384,13 @@ namespace OPTBR6Downloader
             {
                 Console.Clear();
                 Console.WriteLine("----------------------------------------------------------------------------------------------------");
-                Console.WriteLine("|                  OPTB OLD Rainbow Six Siege Downloader  - Made by Puppetino                      |");
+                Console.WriteLine("|                     OPTB OLD Rainbow Six Siege Downloader  - Made by Puppetino                   |");
                 Console.WriteLine("----------------------------------------------------------------------------------------------------");
-                Console.WriteLine("|            YOU MUST CLAIM FOR FREE A COPY OF SIEGE ON STEAM TO USE THE DOWNLOADER                |");
+                Console.WriteLine("|               YOU MUST CLAIM FOR FREE A COPY OF SIEGE ON STEAM TO USE THE DOWNLOADER             |");
                 Console.WriteLine("----------------------------------------------------------------------------------------------------");
-                Console.WriteLine("|        Use ↑/↓ or click to navigate, press Enter to select, Esc to exit                          |");
+                Console.WriteLine("|                      Use your MOUSE to navigate and click to select an option                    |");
+                Console.WriteLine("----------------------------------------------------------------------------------------------------");
+                Console.WriteLine("|                                   Press ESC to exit the program                                  |");
                 Console.WriteLine("----------------------------------------------------------------------------------------------------");
                 Console.WriteLine();
             }
