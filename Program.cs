@@ -1,29 +1,165 @@
-﻿using System;
+﻿using Spectre.Console;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace OPTBR6Downloader
 {
     class Program
     {
-        public static void Main(string[] args)
+        static Dictionary<string, string> checkStatus = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["OneDrive"] = "pending",
+            ["7z.exe"] = "pending",
+            ["DepotDownloader.dll"] = "pending",
+            ["Cracks"] = "pending",
+            ["cmdmenusel.exe"] = "pending",
+            ["localization.lang"] = "pending"
+        };
+
+        static void Main(string[] args)
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
             Console.Title = "OPTB R6 Downloader";
-            Console.WindowHeight = 20;
-            Console.WindowWidth = 100;
 
-            Program.oneDriveCheck();
-            Program.check7Zip();
-            Program.depotCheck();
-            Program.crackCheck();
-            Program.cmdCheck();
-            Program.localizationCheck();
+            try
+            {
+                Console.SetWindowSize(120, 35);
+                Console.SetBufferSize(120, 35);
+                ConsoleUtils.disableResize();
+            }
+            catch { }
 
-            Program.mainMenu();
-            Console.ReadKey();
+            runStartupChecks();
+            mainMenu();
         }
+
+        public static class ConsoleUtils
+        {
+            private const int GWL_STYLE = -16;
+            private const int WS_MAXIMIZEBOX = 0x00010000;
+            private const int WS_MINIMIZEBOX = 0x00020000;
+            private const int WS_SIZEBOX = 0x00040000;
+
+            [DllImport("kernel32.dll", SetLastError = true)]
+            private static extern IntPtr GetConsoleWindow();
+
+            [DllImport("user32.dll", SetLastError = true)]
+            private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+            [DllImport("user32.dll")]
+            private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+            public static void disableResize()
+            {
+                IntPtr handle = GetConsoleWindow();
+                int style = GetWindowLong(handle, GWL_STYLE);
+
+                // Remove the maximize, minimize, and resize options
+                style &= ~WS_MAXIMIZEBOX;
+                style &= ~WS_MINIMIZEBOX;
+                style &= ~WS_SIZEBOX;
+
+                SetWindowLong(handle, GWL_STYLE, style);
+            }
+        }
+
+        public static void runStartupChecks()
+        {
+            // Create table
+            var table = new Table().Border(TableBorder.Rounded).Title("[bold yellow]Startup Checks[/]").Centered();
+            table.AddColumn("[bold]Component[/]");
+            table.AddColumn("[bold]Status[/]");
+
+            foreach (var kv in checkStatus)
+                table.AddRow(kv.Key, "[grey]Pending...[/]");
+
+            AnsiConsole.Live(table)
+                .Start(ctx =>
+                {
+                    void Update(string key, Action check)
+                    {
+                        checkStatus[key] = "running";
+                        updateTable(ctx, table);
+                        ctx.Refresh();
+
+                        check();
+
+                        checkStatus[key] = key switch
+                        {
+                            "OneDrive" => "ok",
+                            "7z.exe" => File.Exists(Path.Combine("Resources", "7z.exe")) ? "ok" : "failed",
+                            "DepotDownloader.dll" => File.Exists(Path.Combine("Resources", "DepotDownloader.dll")) ? "ok" : "failed",
+                            "cmdmenusel.exe" => File.Exists(Path.Combine("Resources", "cmdmenusel.exe")) ? "ok" : "failed",
+                            "localization.lang" => File.Exists(Path.Combine("Resources", "localization.lang")) ? "ok" : "failed",
+                            "Cracks" => Directory.Exists(Path.Combine("Resources", "Cracks")) ? "ok" : "failed",
+                            _ => "failed"
+                        };
+
+                        updateTable(ctx, table);
+                    }
+
+                    Update("OneDrive", oneDriveCheck);
+                    Update("7z.exe", check7Zip);
+                    Update("DepotDownloader.dll", depotCheck);
+                    Update("Cracks", crackCheck);
+                    Update("cmdmenusel.exe", cmdCheck);
+                    Update("localization.lang", localizationCheck);
+                });
+
+            AnsiConsole.MarkupLine("\n[green]All checks completed![/]");
+            AnsiConsole.MarkupLine("[grey]Press any key to continue to the main menu...[/]");
+            Console.ReadKey(true);
+            AnsiConsole.Clear();
+        }
+
+        private static void updateTable(LiveDisplayContext ctx, Table table)
+        {
+            table.Rows.Clear();
+            foreach (var kv in checkStatus)
+            {
+                string status = kv.Value switch
+                {
+                    "ok" => "[green]✔ OK[/]",
+                    "running" => "[yellow]⏳ Running...[/]",
+                    "failed" => "[red]✖ Missing/Failed[/]",
+                    _ => "[grey]Pending...[/]"
+                };
+                table.AddRow(kv.Key, status);
+            }
+            ctx.UpdateTarget(table);
+        }
+
+        static Tree buildCheckTree()
+        {
+            var tree = new Tree("[white]Startup checks[/]");
+            var resources = tree.AddNode("[white]Resources[/]");
+
+            resources.AddNode(formatNode("7z.exe", checkStatus["7z.exe"]));
+            resources.AddNode(formatNode("DepotDownloader.dll", checkStatus["DepotDownloader.dll"]));
+            resources.AddNode(formatNode("cmdmenusel.exe", checkStatus["cmdmenusel.exe"]));
+            resources.AddNode(formatNode("localization.lang", checkStatus["localization.lang"]));
+            resources.AddNode(formatNode("Cracks (folder)", checkStatus["Cracks"]));
+
+            tree.AddNode(formatNode("OneDrive check", checkStatus["OneDrive"]));
+            return tree;
+        }
+
+        static string formatNode(string name, string status)
+        {
+            return status switch
+            {
+                "ok" => $"[green]{name} - OK[/]",
+                "running" => $"[yellow]{name} - running...[/]",
+                "failed" => $"[red]{name} - missing/failed[/]",
+                _ => $"[grey]{name} - pending[/]"
+            };
+        }
+
 
         public static void oneDriveCheck()
         {
@@ -37,13 +173,8 @@ namespace OPTBR6Downloader
                     UseShellExecute = true
                 });
 
-                Console.Clear();
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
-                Console.WriteLine("| You ran this downloader inside of a OneDrive folder, move the downloader to a different location.|");
-                Console.WriteLine("| If you can't figure out how to move it follow this guide: https://shorturl.at/qk3SX              |");
-                Console.WriteLine("| PLEASE just check ALL of the OneDrive folder locations | DONT MAKE HELP POSTS ABOUT THIS         |");
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
-                Console.WriteLine("Press any key to close the downloader...");
+                AnsiConsole.MarkupLine("[red]You ran this downloader inside of a OneDrive folder.[/]");
+                AnsiConsole.MarkupLine("[grey]Move the downloader to a different location.[/]");
                 Console.ReadKey();
                 Environment.Exit(0);
             }
@@ -51,272 +182,111 @@ namespace OPTBR6Downloader
 
         public static void check7Zip()
         {
-            string resourcesPath = Path.Combine("Resources", "Tools");
-            string sevenZipPath = Path.Combine("Resources", "7z.exe");
+            string resourcesPath = Path.Combine("Resources");
+            string sevenZipPath = Path.Combine(resourcesPath, "7z.exe");
 
-            if (!Directory.Exists(resourcesPath)) Directory.CreateDirectory(resourcesPath);
+            if (!Directory.Exists(resourcesPath))
+                Directory.CreateDirectory(resourcesPath);
 
             if (!File.Exists(sevenZipPath))
             {
-                Console.Title = "Downloading 7-Zip...";
-                Console.Clear();
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
-                Console.WriteLine("|                                      Downloading 7-Zip...                                        |");
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
-
-                try
-                {
-                    using (WebClient client = new WebClient())
-                    {
-                        string tempFile = Path.GetTempFileName();
-                        string url = "https://github.com/DataCluster0/R6TBBatchTool/raw/master/Requirements/7z.exe";
-
-                        client.DownloadFile(url, tempFile);
-
-                        string resourcesDir = Path.Combine(Directory.GetCurrentDirectory(), "Resources");
-                        if (!Directory.Exists(resourcesDir))
-                            Directory.CreateDirectory(resourcesDir);
-
-                        string destination = Path.Combine(resourcesDir, "7z.exe");
-                        if (File.Exists(destination)) File.Delete(destination);
-                        File.Move(tempFile, destination);
-                    }
-                    Console.WriteLine("7-Zip downloaded successfully!");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Failed to download 7-Zip: {ex.Message}");
-                    Console.WriteLine("Press any key to exit...");
-                    Console.ReadKey();
-                    Environment.Exit(1);
-                }
+                using var client = new WebClient();
+                string tempFile = Path.GetTempFileName();
+                string url = "https://github.com/DataCluster0/R6TBBatchTool/raw/master/Requirements/7z.exe";
+                client.DownloadFile(url, tempFile);
+                File.Move(tempFile, sevenZipPath, true);
             }
         }
 
         public static void depotCheck()
         {
-            string depotDownloader = Path.Combine("Resources", "DepotDownloader.dll");
-            if (!File.Exists(depotDownloader))
+            string depotFile = Path.Combine("Resources", "DepotDownloader.dll");
+            if (File.Exists(depotFile)) return;
+
+            string zipFile = Path.Combine(Directory.GetCurrentDirectory(), "depot.zip");
+            string url = "https://github.com/SteamRE/DepotDownloader/releases/download/DepotDownloader_3.4.0/DepotDownloader-framework.zip";
+
+            using (var client = new WebClient())
+                client.DownloadFile(url, zipFile);
+
+            string sevenZip = Path.Combine("Resources", "7z.exe");
+            string outputDir = Path.Combine("Resources");
+
+            var psi = new ProcessStartInfo
             {
-                Console.Title = "Downloading DepotDownloader...";
-                Console.Clear();
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
-                Console.WriteLine("|                                 Downloading DepotDownloader...                                   |");
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
+                FileName = sevenZip,
+                Arguments = $"x -y -o\"{outputDir}\" \"{zipFile}\" -aoa",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
 
-                try
-                {
-                    using (WebClient client = new WebClient())
-                    {
-                        string zipFile = Path.Combine(Directory.GetCurrentDirectory(), "depot.zip");
-                        string url = "https://github.com/SteamRE/DepotDownloader/releases/download/DepotDownloader_3.4.0/DepotDownloader-framework.zip";
-
-                        client.DownloadFile(url, zipFile);
-
-                        // Extract with 7z.exe
-                        string sevenZip = Path.Combine(Directory.GetCurrentDirectory(), "Resources", "7z.exe");
-                        string outputDir = Path.Combine(Directory.GetCurrentDirectory(), "Resources");
-
-                        ProcessStartInfo psi = new ProcessStartInfo
-                        {
-                            FileName = sevenZip,
-                            Arguments = $"x -y -o\"{outputDir}\" \"{zipFile}\" -aoa",
-                            UseShellExecute = false,
-                            CreateNoWindow = true
-                        };
-                        using (var proc = Process.Start(psi))
-                        {
-                            proc.WaitForExit();
-                        }
-
-                        File.Delete(zipFile);
-                    }
-
-                    Console.WriteLine("DepotDownloader downloaded and extracted successfully!");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Failed to download DepotDownloader: {ex.Message}");
-                    Console.ReadKey(true);
-                    Environment.Exit(1);
-                }
-
-                depotCheck();
-            }
+            using var proc = Process.Start(psi);
+            proc.WaitForExit();
+            File.Delete(zipFile);
         }
 
         public static void crackCheck()
         {
             string crackDir = Path.Combine("Resources", "Cracks");
-            string crackFolder1 = Path.Combine(crackDir, "Y1SX-Y6S2");
-            string crackFolder2 = Path.Combine(crackDir, "Y6S3");
-            string crackFolder3 = Path.Combine(crackDir, "Y6S4-Y8SX");
-
-            if (!Directory.Exists(crackDir)) Directory.CreateDirectory(crackDir);
-            if (!Directory.Exists(crackFolder1) || !Directory.Exists(crackFolder2) || !Directory.Exists(crackFolder3))
+            if (!Directory.Exists(crackDir))
             {
-                Console.Title = "Downloading Cracks...";
-                Console.Clear();
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
-                Console.WriteLine("|                                     Downloading Cracks...                                        |");
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
-
-                string zipFile = Path.Combine(Directory.GetCurrentDirectory(), "Cracks.zip");
-                string url = "https://github.com/JOJOVAV/r6-downloader/raw/refs/heads/main/Cracks.zip";
-
-                try
-                {
-                    using (WebClient client = new WebClient())
-                    {
-                        client.DownloadFile(url, zipFile);
-                    }
-
-                    string sevenZip = Path.Combine(Directory.GetCurrentDirectory(), "Resources", "7z.exe");
-                    string outputDir = crackDir;
-
-                    if (!Directory.Exists(outputDir)) Directory.CreateDirectory(outputDir);
-
-                    ProcessStartInfo psi = new ProcessStartInfo
-                    {
-                        FileName = sevenZip,
-                        Arguments = $"x -y -o\"{outputDir}\" \"{zipFile}\" -aoa",
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    };
-
-                    using (Process proc = Process.Start(psi))
-                    {
-                        proc.WaitForExit();
-                    }
-
-                    File.Delete(zipFile);
-
-                    Console.WriteLine("Cracks downloaded and extracted successfully!");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Failed to download Cracks: {ex.Message}");
-                    Console.WriteLine("Press any key to exit...");
-                    Console.ReadKey();
-                    Environment.Exit(1);
-                }
+                Directory.CreateDirectory(crackDir);
+                // Optional: status message can be shown in live table instead
             }
         }
 
         public static void cmdCheck()
         {
             string cmdPath = Path.Combine("Resources", "cmdmenusel.exe");
-            if (!File.Exists(cmdPath))
-            {
-                Console.Title = "Downloading cmdmenusel...";
-                Console.Clear();
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
-                Console.WriteLine("|                                 Downloading cmdmenusel...                                        |");
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
+            if (File.Exists(cmdPath)) return;
 
-                try
-                {
-                    using (WebClient client = new WebClient())
-                    {
-                        string tempFile = Path.Combine(Directory.GetCurrentDirectory(), "cmdmenusel.exe");
-                        string url = "https://github.com/SlejmUr/R6-AIOTool-Batch/raw/master/Requirements/cmdmenusel.exe";
-
-                        client.DownloadFile(url, tempFile);
-
-                        string resourcesDir = Path.Combine(Directory.GetCurrentDirectory(), "Resources");
-                        if (!Directory.Exists(resourcesDir))
-                            Directory.CreateDirectory(resourcesDir);
-
-                        string destination = Path.Combine(resourcesDir, "cmdmenusel.exe");
-                        if (File.Exists(destination)) File.Delete(destination);
-                        File.Move(tempFile, destination);
-                    }
-                    Console.WriteLine("cmdmenusel downloaded successfully!");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Failed to download cmdmenusel: {ex.Message}");
-                    Console.ReadKey(true);
-                    Environment.Exit(1);
-                }
-            }
+            using var client = new WebClient();
+            string temp = Path.GetTempFileName();
+            string url = "https://github.com/SlejmUr/R6-AIOTool-Batch/raw/master/Requirements/cmdmenusel.exe";
+            client.DownloadFile(url, temp);
+            File.Move(temp, cmdPath, true);
         }
 
         public static void localizationCheck()
         {
             string langFile = Path.Combine("Resources", "localization.lang");
+            if (File.Exists(langFile)) return;
 
-            if (!File.Exists(langFile))
-            {
-                Console.Title = "Downloading Language File...";
-                Console.Clear();
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
-                Console.WriteLine("|                               Downloading Language Files...                                      |");
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
-
-                try
-                {
-                    using (WebClient client = new WebClient())
-                    {
-                        string tempFile = Path.Combine(Directory.GetCurrentDirectory(), "localization.lang");
-                        string url = "https://github.com/JOJOVAV/r6-downloader/raw/refs/heads/main/localization.lang";
-
-                        client.DownloadFile(url, tempFile);
-
-                        string resourcesDir = Path.Combine(Directory.GetCurrentDirectory(), "Resources");
-
-                        if (!Directory.Exists(resourcesDir)) Directory.CreateDirectory(resourcesDir);
-
-                        string destination = Path.Combine(resourcesDir, "localization.lang");
-                        if (File.Exists(destination)) File.Delete(destination);
-                        File.Move(tempFile, destination);
-                    }
-                    Console.WriteLine("Language file downloaded successfully!");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Failed to download language file: {ex.Message}");
-                    Console.ReadKey(true);
-                    Environment.Exit(1);
-                }
-            }
+            using var client = new WebClient();
+            string temp = Path.GetTempFileName();
+            string url = "https://github.com/JOJOVAV/r6-downloader/raw/refs/heads/main/localization.lang";
+            client.DownloadFile(url, temp);
+            File.Move(temp, langFile, true);
         }
 
         public static void mainMenu()
         {
-            Console.Title = "OPTB R6 Downloader";
-            Console.Clear();
+            AnsiConsole.Clear();
+            AnsiConsole.Write(new Rule("[bold blue]OPTB R6 Downloader[/]").RuleStyle("grey").LeftJustified());
+            AnsiConsole.MarkupLine("[grey]Made by Puppetino[/]");
+            AnsiConsole.MarkupLine("[green]Select a task below:[/]\n");
 
-            string[] options = new string[]
+            var options = new[]
             {
-                "Game Downloader",
-                "Test Server Downloader",
-                "4K Textures Download",
-                "Modding / Extra Tools",
-                "Claim Siege on Steam for free",
-                "Downloader Settings",
-                "Installation Guide and FAQ"
+                "🎮 Game Downloader",
+                "🧪 Test Server Downloader",
+                "🖼️ 4K Textures Download",
+                "🧰 Modding / Extra Tools",
+                "🎁 Claim Siege on Steam (Free)",
+                "⚙️ Downloader Settings",
+                "📖 Installation Guide & FAQ",
+                "❌ Exit"
             };
 
-            int choice = ShowMenu(options);
+            int choice = showMenu(options, "Main Menu");
 
             switch (choice)
             {
-                case 0:
-                    downloadMenu();
-                    break;
-                case 1:
-                case 2:
-                case 3:
-                case 5:
-                    Console.WriteLine("This feature is currently disabled.");
-                    Console.ReadKey();
-                    mainMenu();
-                    break;
+                case 0: downloadMenu(); break;
                 case 4:
                     Process.Start(new ProcessStartInfo
                     {
-                        FileName = "https://store.steampowered.com/app/359550/Tom_Clancys_Rainbow_Six_Siege_X/",
+                        FileName = "https://store.steampowered.com/app/359550/",
                         UseShellExecute = true
                     });
                     mainMenu();
@@ -329,194 +299,174 @@ namespace OPTBR6Downloader
                     });
                     mainMenu();
                     break;
+                case 7:
+                    Environment.Exit(0);
+                    break;
+                default:
+                    AnsiConsole.MarkupLine("[red]This feature is currently disabled.[/]");
+                    Console.ReadKey(true);
+                    mainMenu();
+                    break;
             }
         }
 
-        public static int ShowMenu(string[] options)
+        public static void downloadMenu()
         {
-            Console.CursorVisible = false;
-            int selected = 0;
-            DrawMenu(options, selected, true);
+            AnsiConsole.Clear();
 
-            IntPtr hIn = GetStdHandle(STD_INPUT_HANDLE);
-            uint oldMode;
-            GetConsoleMode(hIn, out oldMode);
+            AnsiConsole.Write(new Rule("[bold blue]🎮 Siege Version Downloader[/]").RuleStyle("grey").LeftJustified());
+            AnsiConsole.MarkupLine("[grey]Select a version to download:[/]\n");
 
-            uint newMode = ENABLE_EXTENDED_FLAGS | ENABLE_MOUSE_INPUT | ENABLE_WINDOW_INPUT;
-            SetConsoleMode(hIn, newMode);
-
-            INPUT_RECORD record;
-            uint read;
-            int lastSelected = selected;
-
-            while (true)
+            var versions = new[]
             {
-                ReadConsoleInput(hIn, out record, 1, out read);
-
-                if (record.EventType == MOUSE_EVENT)
-                {
-                    int y = record.MouseEvent.dwMousePosition.Y - HEADER_LINES;
-                    if (y >= 0 && y < options.Length)
-                    {
-                        selected = y;
-                        if ((record.MouseEvent.dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED) != 0)
-                        {
-                            Console.CursorVisible = true;
-                            SetConsoleMode(hIn, oldMode);
-                            return selected;
-                        }
-                    }
-                }
-
-                if (selected != lastSelected)
-                {
-                    DrawMenu(options, selected, false);
-                    lastSelected = selected;
-                }
-            }
-        }
-
-        private const int HEADER_LINES = 8;
-
-        private static void DrawMenu(string[] options, int selected, bool full)
-        {
-            if (full)
-            {
-                Console.Clear();
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
-                Console.WriteLine("|                     OPTB OLD Rainbow Six Siege Downloader  - Made by Puppetino                   |");
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
-                Console.WriteLine("|               YOU MUST CLAIM FOR FREE A COPY OF SIEGE ON STEAM TO USE THE DOWNLOADER             |");
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
-                Console.WriteLine("|                      Use your MOUSE to navigate and click to select an option                    |");
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
-                Console.WriteLine("|                                   Press ESC to exit the program                                  |");
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
-                Console.WriteLine();
-            }
-
-            for (int i = 0; i < options.Length; i++)
-            {
-                Console.SetCursorPosition(0, HEADER_LINES + i);
-                Console.Write(new string(' ', Console.WindowWidth));
-                Console.SetCursorPosition(0, HEADER_LINES + i);
-
-                if (i == selected)
-                {
-                    Console.ForegroundColor = ConsoleColor.Yellow;
-                    Console.Write($"> {options[i]}");
-                    Console.ResetColor();
-                }
-                else Console.Write($"  {options[i]}");
-            }
-        }
-
-        static void downloadMenu()
-        {
-            Console.Title = "Game Downloader";
-
-            Console.WindowHeight = 50;
-
-            string[] options = new string[]
-            {
-                "<- Back to Main Menu",
-                "Refresh Menu",
-                "Vanilla           | Y1S0 | 14.2 GB |",
-                "Black Ice         | Y1S1 | 16.7 GB |",
-                "Dust Line         | Y1S2 | 20.9 GB |",
-                "Skull Rain        | Y1S3 | 25.1 GB |",
-                "Red Crow          | Y1S4 | 28.5 GB |",
-                "Velvet Shell      | Y2S1 | 33.2 GB |",
-                "Health            | Y2S2 | 34.0 GB |",
-                "Blood Orchid      | Y2S3 | 34.3 GB |",
-                "White Noise       | Y2S4 | 48.7 GB |",
-                "Chimera           | Y3S1 | 58.8 GB | Outbreak Event",
-                "Para Bellum       | Y3S2 | 63.3 GB |",
-                "Grim Sky          | Y3S3 | 72.6 GB | Mad House Event",
-                "Wind Bastion      | Y3S4 | 76.9 GB |",
-                "Burnt Horizon     | Y4S1 | 59.7 GB | Rainbow Is Magic Event",
-                "Phantom Sight     | Y4S2 | 67.1 GB | Showdown Event",
-                "Ember Rise        | Y4S3 | 69.6 GB | Doktor's Curse + Money Heist Event",
-                "Shifting Tides    | Y4S4 | 75.2 GB | Stadium event",
-                "Void Edge         | Y5S1 | 74.3 GB | Grand Larceny + Golden Gun Event",
-                "Steel Wave        | Y5S2 | 81.3 GB | M.U.T.E. Protocol Event",
-                "Shadow Legacy     | Y5S3 | 88.0 GB | Sugar Fright Event",
-                "Neon Dawn (HM)    | Y5S4 | xx.x GB | Heated Metal",
-                "Neon Dawn         | Y5S4 | xx.x GB | Road To S.I. 2021",
-                "Crimson Heist     | Y6S1 | xx.x GB | Rainbow Is Magic 2 + Apocalypse",
-                "North Star        | Y6S2 | xx.x GB | Nest Destruction",
-                "Crystal Guard     | Y6S3 | xx.x GB | Showdown Event",
-                "High Calibre      | Y6S4 | xx.x GB | Stadium + Snowball",
-                "Demon Veil        | Y7S1 | xx.x GB | TOKY Event",
-                "Vector Glare      | Y7S2 | xx.x GB | M.U.T.E Protocol Reboot",
-                "Brutal Swarm      | Y7S3 | xx.x GB | Doctor’s Sniper Event",
-                "Solar Raid        | Y7S4 | xx.x GB | Snow Brawl",
-                "Commanding Force  | Y8S1 | xx.x GB | RIM + TOKY Event",
-                "Dread Factor      | Y8S2 | xx.x GB | Rengoku Event",
-                "Heavy Mettle      | Y8S3 | xx.x GB | Doktor's Curse + No Operators",
-                "Deep Freeze       | Y8S4 | 52.9 GB | No Operators",
-                "Deadly Omen       | Y9S1 | xx.x GB | No Operators",
-                "New Blood         | Y9S2 | xx.x GB | No Operators",
-                "Twin Shells       | Y9S3 | 59.2 GB | No Operators",
-                "Collision Point   | Y9S4 | 59.2 GB | No Operators",
-                "Prep Phase        | Y10S1| 51.4 GB | No Operators"
+                "[red]<- Back to Main Menu[/]",                                                                                 
+                "",
+                "[bold yellow]Year 1[/]",
+                "[green]Vanilla[/]           | [grey]Y1S0[/] | [blue]14.2 GB[/]",
+                "[green]Black Ice[/]         | [grey]Y1S1[/] | [blue]16.7 GB[/]",
+                "[green]Dust Line[/]         | [grey]Y1S2[/] | [blue]20.9 GB[/]",
+                "[green]Skull Rain[/]        | [grey]Y1S3[/] | [blue]25.1 GB[/]",
+                "[green]Red Crow[/]          | [grey]Y1S4[/] | [blue]28.5 GB[/]",
+                "",
+                "[bold yellow]Year 2[/]",
+                "[green]Velvet Shell[/]      | [grey]Y2S1[/] | [blue]33.2 GB[/]",
+                "[green]Health[/]            | [grey]Y2S2[/] | [blue]34.0 GB[/]",
+                "[green]Blood Orchid[/]      | [grey]Y2S3[/] | [blue]34.3 GB[/]",
+                "[green]White Noise[/]       | [grey]Y2S4[/] | [blue]48.7 GB[/]",
+                "",
+                "[bold yellow]Year 3[/]",
+                "[green]Chimera[/]           | [grey]Y3S1[/] | [blue]58.8 GB[/] | Outbreak Event",
+                "[green]Para Bellum[/]       | [grey]Y3S2[/] | [blue]63.3 GB[/]",
+                "[green]Grim Sky[/]          | [grey]Y3S3[/] | [blue]72.6 GB[/] | Mad House Event",
+                "[green]Wind Bastion[/]      | [grey]Y3S4[/] | [blue]76.9 GB[/]",
+                "",
+                "[bold yellow]Year 4[/]",
+                "[green]Burnt Horizon[/]     | [grey]Y4S1[/] | [blue]59.7 GB[/] | Rainbow Is Magic Event",
+                "[green]Phantom Sight[/]     | [grey]Y4S2[/] | [blue]67.1 GB[/] | Showdown Event",
+                "[green]Ember Rise[/]        | [grey]Y4S3[/] | [blue]69.6 GB[/] | Doktor's Curse + Money Heist Event",
+                "[green]Shifting Tides[/]    | [grey]Y4S4[/] | [blue]75.2 GB[/] | Stadium Event",
+                "",
+                "[bold yellow]Year 5[/]",
+                "[green]Void Edge[/]         | [grey]Y5S1[/] | [blue]74.3 GB[/] | Grand Larceny + Golden Gun Event",
+                "[green]Steel Wave[/]        | [grey]Y5S2[/] | [blue]81.3 GB[/] | M.U.T.E. Protocol Event",
+                "[green]Shadow Legacy[/]     | [grey]Y5S3[/] | [blue]88.0 GB[/] | Sugar Fright Event",
+                "[green]Neon Dawn (HM)[/]    | [grey]Y5S4[/] | [blue]??.? GB[/] | Heated Metal",
+                "[green]Neon Dawn[/]         | [grey]Y5S4[/] | [blue]??.? GB[/] | Road To S.I. 2021",
+                "",
+                "[bold yellow]Year 6[/]",
+                "[green]Crimson Heist[/]     | [grey]Y6S1[/] | [blue]??.? GB[/] | Rainbow Is Magic 2 + Apocalypse",
+                "[green]North Star[/]        | [grey]Y6S2[/] | [blue]??.? GB[/] | Nest Destruction",
+                "[green]Crystal Guard[/]     | [grey]Y6S3[/] | [blue]??.? GB[/] | Showdown Event",
+                "[green]High Calibre[/]      | [grey]Y6S4[/] | [blue]??.? GB[/] | Stadium + Snowball",
+                "",
+                "[bold yellow]Year 7[/]",
+                "[green]Demon Veil[/]        | [grey]Y7S1[/] | [blue]??.? GB[/] | TOKY Event",
+                "[green]Vector Glare[/]      | [grey]Y7S2[/] | [blue]??.? GB[/] | M.U.T.E Protocol Reboot",
+                "[green]Brutal Swarm[/]      | [grey]Y7S3[/] | [blue]??.? GB[/] | Doctor’s Sniper Event",
+                "[green]Solar Raid[/]        | [grey]Y7S4[/] | [blue]??.? GB[/] | Snow Brawl",
+                "",
+                "[bold yellow]Year 8[/]",
+                "[green]Commanding Force[/]  | [grey]Y8S1[/] | [blue]??.? GB[/] | RIM + TOKY Event",
+                "[green]Dread Factor[/]      | [grey]Y8S2[/] | [blue]??.? GB[/] | Rengoku Event",
+                "[green]Heavy Mettle[/]      | [grey]Y8S3[/] | [blue]??.? GB[/] | Doktor's Curse + No Operators",
+                "[green]Deep Freeze[/]       | [grey]Y8S4[/] | [blue]52.9 GB[/] | No Operators",
+                "",
+                "[bold yellow]Year 9[/]",
+                "[green]Deadly Omen[/]       | [grey]Y9S1[/] | [blue]??.? GB[/] | No Operators",
+                "[green]New Blood[/]         | [grey]Y9S2[/] | [blue]??.? GB[/] | No Operators",
+                "[green]Twin Shells[/]       | [grey]Y9S3[/] | [blue]59.2 GB[/] | No Operators",
+                "[green]Collision Point[/]   | [grey]Y9S4[/] | [blue]59.2 GB[/] | No Operators",
+                "",
+                "[bold yellow]Year 10[/]",
+                "[green]Prep Phase[/]        | [grey]Y10S1[/] | [blue]51.4 GB[/] | No Operators"
             };
 
-            while (true) {
-                Console.Clear();
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
-                Console.WriteLine("|              Click an option to select a version of Rainbow Six Siege to download.               |");
-                Console.WriteLine("----------------------------------------------------------------------------------------------------");
-                Console.WriteLine("  Season Name       | Year | Size    | Additional Notes");
+            int choice = showMenu(versions, "Select a Siege Version to Download");
 
-                int choice = ShowMenu(options);
+            switch (choice)
+            {
+                case 0: mainMenu(); return;
 
-                switch (choice)
-                {
-                    case 0: mainMenu(); return;
-                    case 1: continue;
-                    case 2: vanilla(); break;
-                    case 3: blackIce(); break;
-                    case 4: dustLine(); break;
-                    case 5: skullRain(); break;
-                    case 6: redCrow(); break;
-                    case 7: velvetShell(); break;
-                    case 8: health(); break;
-                    case 9: bloodOrchide(); break;
-                    case 10: whiteNoise(); break;
-                    case 11: chimera(); break;
-                    case 12: parraBellum(); break;
-                    case 13: grimSky(); break;
-                    case 14: windBastion(); break;
-                    case 15: burntHorizon(); break;
-                    case 16: phantomSight(); break;
-                    case 17: emberRise(); break;
-                    case 18: shiftingTides(); break;
-                    case 19: voidEdge(); break;
-                    case 20: steelWave(); break;
-                    case 21: shadowLegazy(); break;
-                    case 22: hmNeonDawn(); break;
-                    case 23: neonDawn(); break;
-                    case 24: crimsonHeist(); break;
-                    case 25: northStar(); break;
-                    case 26: crystalGuard(); break;
-                    case 27: highCaliber(); break;
-                    case 28: demonVeil(); break;
-                    case 29: vectorGlare(); break;
-                    case 30: brutalSwarm(); break;
-                    case 31: solarRaid(); break;
-                    case 32: commandingForce(); break;
-                    case 33: dreadFactor(); break;
-                    case 34: heavyMettle(); break;
-                    case 35: deepFreeze(); break;
-                    case 36: deadlyOmen(); break;
-                    case 37: newBlood(); break;
-                    case 38: twinShells(); break;
-                    case 39: collisionPoint(); break;
-                    case 40: prepPhase(); break;
-                }
+                // Year 1
+                case 3: vanilla(); break;
+                case 4: blackIce(); break;
+                case 5: dustLine(); break;
+                case 6: skullRain(); break;
+                case 7: redCrow(); break;
+
+                // Year 2
+                case 10: velvetShell(); break;
+                case 11: health(); break;
+                case 12: bloodOrchide(); break;
+                case 13: whiteNoise(); break;
+
+                // Year 3
+                case 16: chimera(); break;
+                case 17: parraBellum(); break;
+                case 18: grimSky(); break;
+                case 19: windBastion(); break;
+
+                // Year 4
+                case 22: burntHorizon(); break;
+                case 23: phantomSight(); break;
+                case 24: emberRise(); break;
+                case 25: shiftingTides(); break;
+
+                // Year 5
+                case 28: voidEdge(); break;
+                case 29: steelWave(); break;
+                case 30: shadowLegazy(); break;
+                case 31: hmNeonDawn(); break;
+                case 32: neonDawn(); break;
+
+                // Year 6
+                case 35: crimsonHeist(); break;
+                case 36: northStar(); break;
+                case 37: crystalGuard(); break;
+                case 38: highCaliber(); break;
+
+                // Year 7
+                case 41: demonVeil(); break;
+                case 42: vectorGlare(); break;
+                case 43: brutalSwarm(); break;
+                case 44: solarRaid(); break;
+
+                // Year 8
+                case 47: commandingForce(); break;
+                case 48: dreadFactor(); break;
+                case 49: heavyMettle(); break;
+                case 50: deepFreeze(); break;
+
+                // Year 9
+                case 53: deadlyOmen(); break;
+                case 54: newBlood(); break;
+                case 55: twinShells(); break;
+                case 56: collisionPoint(); break;
+
+                // Year 10
+                case 59: prepPhase(); break;
+
+                default:
+                    AnsiConsole.MarkupLine("[red]This is not an Option![/]");
+                    Console.ReadKey(true);
+                    downloadMenu();
+                    break;
             }
         }
+
+        public static int showMenu(string[] options, string title)
+        {
+            var choice = AnsiConsole.Prompt(
+                new SelectionPrompt<string>()
+                    .Title($"[yellow]{title}[/]")
+                    .PageSize(30)
+                    .HighlightStyle(new Style(foreground: Color.Cyan1))
+                    .AddChoices(options)
+            );
+
+            return Array.IndexOf(options, choice);
+        }
+
 
         static void vanilla()
         {
@@ -1227,19 +1177,19 @@ namespace OPTBR6Downloader
             string crackSubfolder = null,
             bool includeLocalization = true)
         {
-            Console.Title = $"Downloading {seasonName}...";
-            Console.Clear();
+            AnsiConsole.Clear();
+            AnsiConsole.MarkupLine($"[bold yellow]Starting download for {seasonName}...[/]\n");
 
-            Console.Write("Enter Steam Username: ");
-            string username = Console.ReadLine();
-
+            string username = AnsiConsole.Ask<string>("Enter your [green]Steam username[/]:");
             string downloadsPath = Path.Combine("Downloads", seasonName);
-            if (!Directory.Exists(downloadsPath))
-                Directory.CreateDirectory(downloadsPath);
+            Directory.CreateDirectory(downloadsPath);
 
             foreach (var (depot, manifest) in depots)
             {
-                runDepotDownloader(appId, depot, manifest, username, downloadsPath);
+                AnsiConsole.Status().Start($"Downloading depot [blue]{depot}[/]...", _ =>
+                {
+                    runDepotDownloader(appId, depot, manifest, username, downloadsPath);
+                });
             }
 
             if (!string.IsNullOrEmpty(crackSubfolder))
@@ -1247,6 +1197,7 @@ namespace OPTBR6Downloader
                 string cracksPath = Path.Combine("Resources", "Cracks", crackSubfolder);
                 if (Directory.Exists(cracksPath))
                 {
+                    AnsiConsole.MarkupLine("[yellow]Copying crack files...[/]");
                     runRoboCopy(cracksPath, downloadsPath);
                 }
             }
@@ -1256,6 +1207,7 @@ namespace OPTBR6Downloader
                 string locFile = Path.Combine("Resources", "localization.lang");
                 if (File.Exists(locFile))
                 {
+                    AnsiConsole.MarkupLine("[yellow]Copying localization file...[/]");
                     runRoboCopy("Resources", downloadsPath, "localization.lang");
                 }
             }
@@ -1269,11 +1221,12 @@ namespace OPTBR6Downloader
 
             if (!File.Exists(depotDownloader))
             {
-                Console.WriteLine("ERROR: DepotDownloader.dll not found in Resources folder.");
+                AnsiConsole.MarkupLine("[red]ERROR: DepotDownloader.dll not found.[/]");
                 return;
             }
 
-            string args = $"\"{depotDownloader}\" -app {app} -depot {depot} -manifest {manifest} -username {username} -remember-password -dir \"{outputDir}\" -validate -max-downloads 25";
+            string args = $"\"{depotDownloader}\" -app {app} -depot {depot} -manifest {manifest} " +
+                          $"-username {username} -remember-password -dir \"{outputDir}\" -validate -max-downloads 25";
 
             var psi = new ProcessStartInfo
             {
@@ -1282,18 +1235,17 @@ namespace OPTBR6Downloader
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                RedirectStandardInput = false,
-                CreateNoWindow = false
+                CreateNoWindow = true
             };
 
-            using (var proc = Process.Start(psi))
+            using var proc = Process.Start(psi);
+            proc.OutputDataReceived += (s, e) =>
             {
-                proc.OutputDataReceived += (s, e) => { if (e.Data != null) Console.WriteLine(e.Data); };
-                proc.ErrorDataReceived += (s, e) => { if (e.Data != null) Console.WriteLine("ERROR: " + e.Data); };
-                proc.BeginOutputReadLine();
-                proc.BeginErrorReadLine();
-                proc.WaitForExit();
-            }
+                if (!string.IsNullOrWhiteSpace(e.Data))
+                    AnsiConsole.MarkupLine($"[grey]{Markup.Escape(e.Data)}[/]");
+            };
+            proc.BeginOutputReadLine();
+            proc.WaitForExit();
         }
 
         static void runRoboCopy(string source, string destination, string extraArgs = "")
@@ -1308,77 +1260,24 @@ namespace OPTBR6Downloader
                 CreateNoWindow = true
             };
 
-            using (var proc = Process.Start(psi))
+            using var proc = Process.Start(psi);
+            proc.OutputDataReceived += (s, e) =>
             {
-                proc.OutputDataReceived += (s, e) => { if (e.Data != null) Console.WriteLine(e.Data); };
-                proc.ErrorDataReceived += (s, e) => { if (e.Data != null) Console.WriteLine("ERROR: " + e.Data); };
-                proc.BeginOutputReadLine();
-                proc.BeginErrorReadLine();
-                proc.WaitForExit();
-            }
+                if (!string.IsNullOrWhiteSpace(e.Data))
+                    AnsiConsole.MarkupLine($"[grey]{Markup.Escape(e.Data)}[/]");
+            };
+            proc.BeginOutputReadLine();
+            proc.WaitForExit();
         }
 
         static void downloadComplete()
         {
-            Console.Title = "Download Complete";
-            Console.WindowHeight = 20;
-            Console.Clear();
-            Console.WriteLine("----------------------------------------------------------------------------------------------------");
-            Console.WriteLine("|                                     Download Complete!                                           |");
-            Console.WriteLine("----------------------------------------------------------------------------------------------------");
-            Console.WriteLine();
-            Console.WriteLine("Press any key to return to the main menu...");
-
+            AnsiConsole.Clear();
+            AnsiConsole.Write(new Rule("[bold green]Download Complete![/]").RuleStyle("grey").LeftJustified());
+            AnsiConsole.MarkupLine("[green]Your selected version has been downloaded successfully.[/]");
+            AnsiConsole.MarkupLine("[grey]Press any key to return to the main menu...[/]");
             Console.ReadKey(true);
-            Console.Clear();
             mainMenu();
         }
-
-        #region Native
-        private const int STD_INPUT_HANDLE = -10;
-        private const int ENABLE_MOUSE_INPUT = 0x0010;
-        private const int ENABLE_WINDOW_INPUT = 0x0008;
-        private const int ENABLE_EXTENDED_FLAGS = 0x0080;
-        private const int ENABLE_PROCESSED_INPUT = 0x0001;
-        private const int ENABLE_LINE_INPUT = 0x0002;
-        private const int KEY_EVENT = 0x0001;
-        private const int MOUSE_EVENT = 0x0002;
-        private const int FROM_LEFT_1ST_BUTTON_PRESSED = 0x0001;
-
-        [StructLayout(LayoutKind.Sequential)] private struct COORD { public short X; public short Y; }
-
-        [StructLayout(LayoutKind.Explicit)]
-        private struct INPUT_RECORD
-        {
-            [FieldOffset(0)] public ushort EventType;
-            [FieldOffset(4)] public KEY_EVENT_RECORD KeyEvent;
-            [FieldOffset(4)] public MOUSE_EVENT_RECORD MouseEvent;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct KEY_EVENT_RECORD
-        {
-            [MarshalAs(UnmanagedType.Bool)] public bool bKeyDown;
-            public ushort wRepeatCount;
-            public ushort wVirtualKeyCode;
-            public ushort wVirtualScanCode;
-            public char UnicodeChar;
-            public uint dwControlKeyState;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct MOUSE_EVENT_RECORD
-        {
-            public COORD dwMousePosition;
-            public uint dwButtonState;
-            public uint dwControlKeyState;
-            public uint dwEventFlags;
-        }
-
-        [DllImport("kernel32.dll")] private static extern IntPtr GetStdHandle(int nStdHandle);
-        [DllImport("kernel32.dll")] private static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
-        [DllImport("kernel32.dll")] private static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
-        [DllImport("kernel32.dll", SetLastError = true)] private static extern bool ReadConsoleInput(IntPtr hConsoleInput, out INPUT_RECORD lpBuffer, uint nLength, out uint lpNumberOfEventsRead);
-        #endregion
     }
 }
